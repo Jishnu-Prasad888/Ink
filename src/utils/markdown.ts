@@ -8,7 +8,10 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
 
-// Initialize Mermaid
+if (import.meta.env.DEV) {
+  console.log("[markdown] Initializing with highlight.js, mermaid, katex");
+}
+
 mermaid.initialize({
   startOnLoad: false,
   theme: "base",
@@ -30,6 +33,8 @@ const md: MarkdownIt = new MarkdownIt({
   highlight: function (str, lang) {
     if (lang && hljs.getLanguage(lang)) {
       try {
+        if (import.meta.env.DEV)
+          console.log(`[highlight] Lang: ${lang}, length: ${str.length}`);
         return (
           '<pre class="hljs"><code>' +
           hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
@@ -43,7 +48,6 @@ const md: MarkdownIt = new MarkdownIt({
   },
 });
 
-// Add plugins
 md.use(markdownItTaskLists);
 md.use(markdownItFootnote);
 md.use(markdownItTexmath, {
@@ -52,7 +56,6 @@ md.use(markdownItTexmath, {
   katexOptions: { macros: {} },
 });
 
-// Custom renderer for mermaid
 const defaultFence = md.renderer.rules.fence!;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
@@ -60,23 +63,31 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 
   if (token.info === "mermaid") {
     const id = `mermaid-${Date.now()}-${idx}`;
+    if (import.meta.env.DEV)
+      console.log(`[mermaid] Rendering diagram with id: ${id}`);
     return `<div class="mermaid" id="${id}">${code}</div>`;
   }
-
   return defaultFence(tokens, idx, options, env, self);
 };
 
 export const renderMarkdown = async (content: string): Promise<string> => {
+  if (import.meta.env.DEV)
+    console.log(`[renderMarkdown] Input length: ${content.length}`);
   const html = md.render(content);
+  if (import.meta.env.DEV)
+    console.log(`[renderMarkdown] Output HTML length: ${html.length}`);
   return html;
 };
 
 export const renderMermaidDiagrams = async () => {
   const elements = document.querySelectorAll<HTMLElement>(".mermaid");
+  if (import.meta.env.DEV)
+    console.log(`[renderMermaid] Found ${elements.length} mermaid elements`);
   if (elements.length > 0) {
     await mermaid.run({
       nodes: elements,
       suppressErrors: true,
     });
+    if (import.meta.env.DEV) console.log("[renderMermaid] Diagrams rendered");
   }
 };

@@ -7,7 +7,12 @@ interface SplitViewProps {
   tab: Tab;
 }
 
+const log = (msg: string) => {
+  if (import.meta.env.DEV) console.log(`[SplitView] ${msg}`);
+};
+
 export const SplitView: React.FC<SplitViewProps> = ({ tab }) => {
+  log(`rendering for tab ${tab.id} (${tab.fileName})`);
   return (
     <div className="split-view">
       <div className="editor-pane">

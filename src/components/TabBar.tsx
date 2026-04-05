@@ -2,11 +2,16 @@ import React from "react";
 import { useTabStore } from "../store/tabStore";
 import { Tab } from "./Tab";
 
+const log = (msg: string, data?: any) => {
+  if (import.meta.env.DEV) console.log(`[TabBar:${msg}]`, data ?? "");
+};
+
 export const TabBar: React.FC = () => {
   const { tabs, activeTabId, reorderTabs, closeTab, setActiveTab } =
     useTabStore();
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
+    log("drag start", { index, fileName: tabs[index]?.fileName });
     e.dataTransfer.setData("text/plain", index.toString());
   };
 
@@ -17,6 +22,7 @@ export const TabBar: React.FC = () => {
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
     const dragIndex = parseInt(e.dataTransfer.getData("text/plain"));
+    log("drop", { dragIndex, dropIndex });
     if (dragIndex !== dropIndex) {
       reorderTabs(dragIndex, dropIndex);
     }

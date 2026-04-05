@@ -7,6 +7,10 @@ interface MarkdownPreviewProps {
   isSplit?: boolean;
 }
 
+const log = (msg: string, data?: any) => {
+  if (import.meta.env.DEV) console.log(`[Preview:${msg}]`, data ?? "");
+};
+
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   tab,
   isSplit = false,
@@ -17,6 +21,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   useEffect(() => {
     const render = async () => {
+      log("render markdown", { length: tab.content.length });
       const rendered = await renderMarkdown(tab.content);
       setHtml(rendered);
     };
@@ -25,21 +30,19 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   useEffect(() => {
     if (previewRef.current) {
-      // Restore scroll position
       if (tab.previewScrollPosition) {
+        log("restore scroll", tab.previewScrollPosition);
         previewRef.current.scrollTop = tab.previewScrollPosition;
       }
 
-      // Render mermaid diagrams
       renderMermaidDiagrams();
 
-      // Add task list toggle functionality
       const taskItems = previewRef.current.querySelectorAll(
         ".task-list-item input",
       );
+      log("task items found", taskItems.length);
       taskItems.forEach((checkbox: any) => {
         checkbox.addEventListener("change", (e: any) => {
-          // Update markdown content to reflect checkbox state
           const lineIndex = findLineIndexForTask(checkbox);
           if (lineIndex !== -1) {
             const lines = tab.content.split("\n");
@@ -49,6 +52,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
               `- [${checkbox.checked ? "x" : " "}]`,
             );
             lines[lineIndex] = newLine;
+            log("task toggled", { lineIndex, oldLine: currentLine, newLine });
             updateTab(tab.id, { content: lines.join("\n") });
           }
         });
@@ -57,12 +61,10 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   }, [html, tab.id]);
 
   const findLineIndexForTask = (checkbox: any): number => {
-    // Find the line containing this task checkbox
     const items = previewRef.current?.querySelectorAll(".task-list-item");
     if (items) {
       for (let i = 0; i < items.length; i++) {
         if (items[i].contains(checkbox)) {
-          // Find corresponding line in markdown
           const text = items[i].textContent || "";
           const lines = tab.content.split("\n");
           return lines.findIndex((line) => line.includes(text.trim()));
@@ -74,6 +76,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   const handleScroll = () => {
     if (previewRef.current) {
+      log("preview scroll", previewRef.current.scrollTop);
       updateTab(tab.id, {
         previewScrollPosition: previewRef.current.scrollTop,
       });
