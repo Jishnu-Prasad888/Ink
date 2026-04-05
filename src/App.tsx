@@ -7,8 +7,6 @@ import { useTabStore } from "./store/tabStore";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useSingleInstance } from "./hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
-import { readFile } from "@tauri-apps/plugin-fs";
-import { basename } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
 
 const log = (msg: string, data?: any) => {
@@ -69,9 +67,10 @@ function App() {
       log("open-files event", files);
       files.forEach(async (filePath) => {
         try {
-          const data = await readFile(filePath);
-          const content = new TextDecoder().decode(data);
-          const fileName = await basename(filePath);
+          const content: string = await invoke("read_file", { path: filePath });
+          const fileName =
+            filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+
           addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
         } catch (error) {
           console.error("Failed to open file:", error);
@@ -107,9 +106,10 @@ function App() {
         useTabStore.getState().setActiveTab(existing.id);
         continue;
       }
-      const data = await readFile(filePath);
-      const content = new TextDecoder().decode(data);
-      const fileName = await basename(filePath);
+      const content: string = await invoke("read_file", { path: filePath });
+      const fileName =
+        filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+
       addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
     }
   };
@@ -146,7 +146,9 @@ function App() {
           path: savePath,
           content: freshTab.content,
         });
-        const fileName = await basename(savePath);
+        const fileName =
+          savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
+
         updateTab(freshTab.id, {
           filePath: savePath,
           fileName,
@@ -170,7 +172,9 @@ function App() {
         savePath += ".md";
       }
       await invoke("write_file", { path: savePath, content: freshTab.content });
-      const fileName = await basename(savePath);
+      const fileName =
+        savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
+
       updateTab(freshTab.id, { filePath: savePath, fileName, isDirty: false });
     }
   };

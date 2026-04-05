@@ -41,7 +41,9 @@ export const Editor: React.FC<EditorProps> = ({ tab }) => {
     saveTabContent(tab.id, value);
   };
 
-  const handleFocus = (view: any) => {
+  const handleFocus = () => {
+    const view = editorRef.current?.view;
+    if (!view) return;
     const pos = view.state.selection.main.head;
     log("focus", { cursorPosition: pos });
     updateTab(tab.id, { cursorPosition: pos });
