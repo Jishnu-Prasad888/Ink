@@ -1,0 +1,76 @@
+/* ── Find bar ────────────────────────────────────────────────────────────── */
+.find-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-toolbar, #fafaf8);
+  border-bottom: 1px solid var(--border, #e4e3de);
+  flex-shrink: 0;
+}
+
+.find-bar svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted, #a09e99);
+  flex-shrink: 0;
+}
+
+.find-input {
+  flex: 1;
+  border: 1px solid var(--border, #e4e3de);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  color: var(--text, #1a1917);
+  outline: none;
+  min-width: 0;
+}
+
+.find-input:focus {
+  border-color: #2d6be4;
+  box-shadow: 0 0 0 2px rgba(45, 107, 228, 0.15);
+}
+
+.find-clear {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text-muted, #a09e99);
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.find-clear:hover {
+  color: var(--text, #1a1917);
+  background: var(--hover, #f0efeb);
+}
+
+.find-clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+.find-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-muted, #a09e99);
+}
+
+.find-close:hover {
+  background: var(--hover, #f0efeb);
+  color: var(--text, #1a1917);
+}
+
+.find-close svg {
+  width: 13px;
+  height: 13px;
+}

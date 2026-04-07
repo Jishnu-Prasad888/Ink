@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TabBar } from "./components/TabBar";
 import { Editor } from "./components/Editor";
 import { MarkdownPreview } from "./components/MarkdownPreview";
 import { SplitView } from "./components/SplitView";
 import { useTabStore } from "./store/tabStore";
-import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useSingleInstance } from "./hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -36,20 +35,82 @@ const Icon = {
       <path d="M2 10v2h10v-2M7 2v7M4.5 6.5L7 9l2.5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
+  Find: () => (
+    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
+  Close: () => (
+    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  ),
 };
 
 function App() {
   const { tabs, activeTabId, addTab, updateTab } = useTabStore();
   const [isDragging, setIsDragging] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const findInputRef = useRef<HTMLInputElement>(null);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  useKeyboardShortcuts();
   useSingleInstance();
 
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
   useEffect(() => {
-    const handleDragOver = (e: DragEvent) => { e.preventDefault(); setIsDragging(true); };
+    const onKeyDown = async (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+
+      if (e.key === "s" && e.shiftKey) {
+        // Ctrl+Shift+S → Save As
+        e.preventDefault();
+        await handleSaveAs();
+        return;
+      }
+      if (e.key === "s") {
+        // Ctrl+S → Save
+        e.preventDefault();
+        await handleSaveFile();
+        return;
+      }
+      if (e.key === "o") {
+        // Ctrl+O → Open
+        e.preventDefault();
+        await handleOpenFile();
+        return;
+      }
+      if (e.key === "f") {
+        // Ctrl+F → Find
+        e.preventDefault();
+        setFindOpen(true);
+        setTimeout(() => findInputRef.current?.focus(), 50);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTabId]); // re-bind when active tab changes so handlers capture fresh state
+
+  // Close find bar on Escape
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && findOpen) {
+        setFindOpen(false);
+        setFindQuery("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [findOpen]);
+
+  // ── Drag-and-drop ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    const handleDragOver  = (e: DragEvent) => { e.preventDefault(); setIsDragging(true); };
     const handleDragLeave = (e: DragEvent) => { e.preventDefault(); setIsDragging(false); };
-    const handleDrop = async (e: DragEvent) => {
+    const handleDrop      = async (e: DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
       const files = Array.from(e.dataTransfer?.files || []);
@@ -61,16 +122,17 @@ function App() {
         }
       }
     };
-    window.addEventListener("dragover", handleDragOver);
-    window.addEventListener("dragleave", handleDragLeave);
-    window.addEventListener("drop", handleDrop);
+    window.addEventListener("dragover",   handleDragOver);
+    window.addEventListener("dragleave",  handleDragLeave);
+    window.addEventListener("drop",       handleDrop);
     return () => {
-      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("dragover",  handleDragOver);
       window.removeEventListener("dragleave", handleDragLeave);
-      window.removeEventListener("drop", handleDrop);
+      window.removeEventListener("drop",      handleDrop);
     };
   }, []);
 
+  // ── Tauri file-open event ───────────────────────────────────────────────────
   useEffect(() => {
     const unlisten = listen("open-files", (event: any) => {
       const files: string[] = event.payload;
@@ -88,6 +150,7 @@ function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
+  // ── File handlers ───────────────────────────────────────────────────────────
   const handleNewFile = async () => {
     addTab({ filePath: null, fileName: "Untitled", content: "# New Document\n\nStart writing...", mode: "edit", isDirty: false });
   };
@@ -104,8 +167,7 @@ function App() {
   };
 
   const handleSaveFile = async () => {
-    if (!activeTab) return;
-    const freshTab = useTabStore.getState().tabs.find((t) => t.id === activeTab.id);
+    const freshTab = useTabStore.getState().tabs.find((t) => t.id === useTabStore.getState().activeTabId);
     if (!freshTab) return;
     if (freshTab.filePath) {
       await invoke("write_file", { path: freshTab.filePath, content: freshTab.content });
@@ -122,8 +184,7 @@ function App() {
   };
 
   const handleSaveAs = async () => {
-    if (!activeTab) return;
-    const freshTab = useTabStore.getState().tabs.find((t) => t.id === activeTab.id);
+    const freshTab = useTabStore.getState().tabs.find((t) => t.id === useTabStore.getState().activeTabId);
     if (!freshTab) return;
     let savePath: string | null = await invoke("save_file_dialog");
     if (savePath) {
@@ -140,6 +201,12 @@ function App() {
     if (activeTab) updateTab(activeTab.id, { mode });
   };
 
+  const handleOpenFind = () => {
+    setFindOpen(true);
+    setTimeout(() => findInputRef.current?.focus(), 50);
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   const renderContent = () => {
     if (!activeTab) {
       return (
@@ -154,10 +221,10 @@ function App() {
       );
     }
     switch (activeTab.mode) {
-      case "view":  return <MarkdownPreview tab={activeTab} />;
-      case "edit":  return <Editor tab={activeTab} />;
-      case "split": return <SplitView tab={activeTab} />;
-      default:      return <Editor tab={activeTab} />;
+      case "view":  return <MarkdownPreview tab={activeTab} searchQuery={findQuery} />;
+      case "edit":  return <Editor tab={activeTab} searchQuery={findQuery} />;
+      case "split": return <SplitView tab={activeTab} searchQuery={findQuery} />;
+      default:      return <Editor tab={activeTab} searchQuery={findQuery} />;
     }
   };
 
@@ -166,10 +233,11 @@ function App() {
       <div className="toolbar">
         <div className="toolbar-actions">
           <button className="toolbar-btn" onClick={handleNewFile}><Icon.New /> New</button>
-          <button className="toolbar-btn" onClick={handleOpenFile}><Icon.Open /> Open</button>
+          <button className="toolbar-btn" onClick={handleOpenFile} title="Open (Ctrl+O)"><Icon.Open /> Open</button>
+          <button className="toolbar-btn" onClick={handleOpenFind} title="Find (Ctrl+F)"><Icon.Find /> Find</button>
           <div className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={handleSaveFile}><Icon.Save /> Save</button>
-          <button className="toolbar-btn" onClick={handleSaveAs}>Save as</button>
+          <button className="toolbar-btn" onClick={handleSaveFile} title="Save (Ctrl+S)"><Icon.Save /> Save</button>
+          <button className="toolbar-btn" onClick={handleSaveAs} title="Save As (Ctrl+Shift+S)">Save as</button>
           <div className="toolbar-divider" />
           <button className="toolbar-btn" onClick={handleExportPDF}><Icon.Export /> Export PDF</button>
         </div>
@@ -181,6 +249,35 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Find bar */}
+      {findOpen && (
+        <div className="find-bar">
+          <Icon.Find />
+          <input
+            ref={findInputRef}
+            className="find-input"
+            placeholder="Find in document…"
+            value={findQuery}
+            onChange={(e) => setFindQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { setFindOpen(false); setFindQuery(""); }
+            }}
+          />
+          {findQuery && (
+            <span className="find-clear" onClick={() => setFindQuery("")} title="Clear">
+              <Icon.Close />
+            </span>
+          )}
+          <button
+            className="find-close"
+            onClick={() => { setFindOpen(false); setFindQuery(""); }}
+            title="Close (Esc)"
+          >
+            <Icon.Close />
+          </button>
+        </div>
+      )}
 
       <TabBar />
       <div className="content-area">{renderContent()}</div>

@@ -7,39 +7,30 @@ const log = (msg: string, data?: any) => {
 };
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, reorderTabs, closeTab, setActiveTab } =
-    useTabStore();
+  const { tabs, activeTabId, reorderTabs, closeTab, setActiveTab } = useTabStore();
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
-    log("drag start", { index, fileName: tabs[index]?.fileName });
     e.dataTransfer.setData("text/plain", index.toString());
+    e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
   };
 
   const handleDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
     const dragIndex = parseInt(e.dataTransfer.getData("text/plain"));
-    log("drop", { dragIndex, dropIndex });
-    if (dragIndex !== dropIndex) {
-      reorderTabs(dragIndex, dropIndex);
-    }
+    if (dragIndex !== dropIndex) reorderTabs(dragIndex, dropIndex);
   };
 
   if (tabs.length === 0) {
     return (
       <div className="tab-bar">
-        <div
-          style={{
-            padding: "0 16px",
-            color: "var(--text-muted)",
-            fontSize: "13px",
-          }}
-        >
+        <span style={{ padding: "0 4px", color: "var(--text-muted)", fontSize: "12px" }}>
           No files open
-        </div>
+        </span>
       </div>
     );
   }
