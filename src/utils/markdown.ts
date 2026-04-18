@@ -73,7 +73,14 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 export const renderMarkdown = async (content: string): Promise<string> => {
   if (import.meta.env.DEV)
     console.log(`[renderMarkdown] Input length: ${content.length}`);
-  const html = md.render(content);
+  let html = md.render(content);
+
+  // Add target="_blank" to all links
+  html = html.replace(
+    /<a\s+href=/g,
+    '<a target="_blank" rel="noopener noreferrer" href=',
+  );
+
   if (import.meta.env.DEV)
     console.log(`[renderMarkdown] Output HTML length: ${html.length}`);
   return html;
