@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { TabBar } from "./components/TabBar";
-import { Editor } from "./components/Editor";
-import { MarkdownPreview } from "./components/MarkdownPreview";
-import { SplitView } from "./components/SplitView";
-import { useTabStore } from "./store/tabStore";
-import { useSingleInstance } from "./hooks/useSingleInstance";
+import { TabBar } from "./TabBar";
+import { Editor } from "./Editor";
+import { MarkdownPreview } from "./MarkdownPreview";
+import { SplitView } from "./SplitView";
+import { useTabStore } from "../store/tabStore";
+import { useSingleInstance } from "../hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -15,35 +15,81 @@ const log = (msg: string, data?: any) => {
 const Icon = {
   New: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path
+        d="M7 2v10M2 7h10"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   ),
   Open: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1.5 5h11v7a1 1 0 01-1 1h-9a1 1 0 01-1-1V5zM1.5 5l1.5-3h3l1 1.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+      <path
+        d="M1.5 5h11v7a1 1 0 01-1 1h-9a1 1 0 01-1-1V5zM1.5 5l1.5-3h3l1 1.5h5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
     </svg>
   ),
   Save: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 2h8l2 2v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2z" stroke="currentColor" strokeWidth="1.3"/>
-      <rect x="4.5" y="1.5" width="5" height="3" rx=".5" stroke="currentColor" strokeWidth="1.3"/>
-      <rect x="3.5" y="8" width="7" height="4.5" rx=".5" stroke="currentColor" strokeWidth="1.3"/>
+      <path
+        d="M2 2h8l2 2v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <rect
+        x="4.5"
+        y="1.5"
+        width="5"
+        height="3"
+        rx=".5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <rect
+        x="3.5"
+        y="8"
+        width="7"
+        height="4.5"
+        rx=".5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
     </svg>
   ),
   Export: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 10v2h10v-2M7 2v7M4.5 6.5L7 9l2.5-2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      <path
+        d="M2 10v2h10v-2M7 2v7M4.5 6.5L7 9l2.5-2.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   ),
   Find: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3"/>
-      <path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M9.5 9.5L12.5 12.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   ),
   Close: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path
+        d="M3 3l8 8M11 3l-8 8"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   ),
 };
@@ -108,27 +154,42 @@ function App() {
 
   // ── Drag-and-drop ───────────────────────────────────────────────────────────
   useEffect(() => {
-    const handleDragOver  = (e: DragEvent) => { e.preventDefault(); setIsDragging(true); };
-    const handleDragLeave = (e: DragEvent) => { e.preventDefault(); setIsDragging(false); };
-    const handleDrop      = async (e: DragEvent) => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+    };
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+    };
+    const handleDrop = async (e: DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
       const files = Array.from(e.dataTransfer?.files || []);
-      log("files dropped", files.map((f) => f.name));
+      log(
+        "files dropped",
+        files.map((f) => f.name),
+      );
       for (const file of files) {
         if (file.name.endsWith(".md") || file.name.endsWith(".markdown")) {
           const content = await file.text();
-          addTab({ filePath: null, fileName: file.name, content, mode: "edit", isDirty: true });
+          addTab({
+            filePath: null,
+            fileName: file.name,
+            content,
+            mode: "edit",
+            isDirty: true,
+          });
         }
       }
     };
-    window.addEventListener("dragover",   handleDragOver);
-    window.addEventListener("dragleave",  handleDragLeave);
-    window.addEventListener("drop",       handleDrop);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("drop", handleDrop);
     return () => {
-      window.removeEventListener("dragover",  handleDragOver);
+      window.removeEventListener("dragover", handleDragOver);
       window.removeEventListener("dragleave", handleDragLeave);
-      window.removeEventListener("drop",      handleDrop);
+      window.removeEventListener("drop", handleDrop);
     };
   }, []);
 
@@ -140,62 +201,97 @@ function App() {
       files.forEach(async (filePath) => {
         try {
           const content: string = await invoke("read_file", { path: filePath });
-          const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+          const fileName =
+            filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
           addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
         } catch (error) {
           console.error("Failed to open file:", error);
         }
       });
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   // ── File handlers ───────────────────────────────────────────────────────────
   const handleNewFile = async () => {
-    addTab({ filePath: null, fileName: "Untitled", content: "# New Document\n\nStart writing...", mode: "edit", isDirty: false });
+    addTab({
+      filePath: null,
+      fileName: "Untitled",
+      content: "# New Document\n\nStart writing...",
+      mode: "edit",
+      isDirty: false,
+    });
   };
 
   const handleOpenFile = async () => {
     const paths: string[] = await invoke("open_file_dialog");
     for (const filePath of paths) {
-      const existing = useTabStore.getState().tabs.find((t) => t.filePath === filePath);
-      if (existing) { useTabStore.getState().setActiveTab(existing.id); continue; }
+      const existing = useTabStore
+        .getState()
+        .tabs.find((t) => t.filePath === filePath);
+      if (existing) {
+        useTabStore.getState().setActiveTab(existing.id);
+        continue;
+      }
       const content: string = await invoke("read_file", { path: filePath });
-      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+      const fileName =
+        filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
       addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
     }
   };
 
   const handleSaveFile = async () => {
-    const freshTab = useTabStore.getState().tabs.find((t) => t.id === useTabStore.getState().activeTabId);
+    const freshTab = useTabStore
+      .getState()
+      .tabs.find((t) => t.id === useTabStore.getState().activeTabId);
     if (!freshTab) return;
     if (freshTab.filePath) {
-      await invoke("write_file", { path: freshTab.filePath, content: freshTab.content });
+      await invoke("write_file", {
+        path: freshTab.filePath,
+        content: freshTab.content,
+      });
       updateTab(freshTab.id, { isDirty: false });
     } else {
       let savePath: string | null = await invoke("save_file_dialog");
       if (savePath) {
-        if (!savePath.endsWith(".md") && !savePath.endsWith(".markdown")) savePath += ".md";
-        await invoke("write_file", { path: savePath, content: freshTab.content });
-        const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
-        updateTab(freshTab.id, { filePath: savePath, fileName, isDirty: false });
+        if (!savePath.endsWith(".md") && !savePath.endsWith(".markdown"))
+          savePath += ".md";
+        await invoke("write_file", {
+          path: savePath,
+          content: freshTab.content,
+        });
+        const fileName =
+          savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
+        updateTab(freshTab.id, {
+          filePath: savePath,
+          fileName,
+          isDirty: false,
+        });
       }
     }
   };
 
   const handleSaveAs = async () => {
-    const freshTab = useTabStore.getState().tabs.find((t) => t.id === useTabStore.getState().activeTabId);
+    const freshTab = useTabStore
+      .getState()
+      .tabs.find((t) => t.id === useTabStore.getState().activeTabId);
     if (!freshTab) return;
     let savePath: string | null = await invoke("save_file_dialog");
     if (savePath) {
-      if (!savePath.endsWith(".md") && !savePath.endsWith(".markdown")) savePath += ".md";
+      if (!savePath.endsWith(".md") && !savePath.endsWith(".markdown"))
+        savePath += ".md";
       await invoke("write_file", { path: savePath, content: freshTab.content });
-      const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
+      const fileName =
+        savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
       updateTab(freshTab.id, { filePath: savePath, fileName, isDirty: false });
     }
   };
 
-  const handleExportPDF = () => { window.print(); };
+  const handleExportPDF = () => {
+    window.print();
+  };
 
   const handleModeChange = (mode: "view" | "edit" | "split") => {
     if (activeTab) updateTab(activeTab.id, { mode });
@@ -214,17 +310,25 @@ function App() {
           <h2>Markdown Editor</h2>
           <p>Drop .md files here or open one to get started</p>
           <div className="welcome-actions">
-            <button className="welcome-btn primary" onClick={handleNewFile}>New file</button>
-            <button className="welcome-btn" onClick={handleOpenFile}>Open file</button>
+            <button className="welcome-btn primary" onClick={handleNewFile}>
+              New file
+            </button>
+            <button className="welcome-btn" onClick={handleOpenFile}>
+              Open file
+            </button>
           </div>
         </div>
       );
     }
     switch (activeTab.mode) {
-      case "view":  return <MarkdownPreview tab={activeTab} searchQuery={findQuery} />;
-      case "edit":  return <Editor tab={activeTab} searchQuery={findQuery} />;
-      case "split": return <SplitView tab={activeTab} searchQuery={findQuery} />;
-      default:      return <Editor tab={activeTab} searchQuery={findQuery} />;
+      case "view":
+        return <MarkdownPreview tab={activeTab} searchQuery={findQuery} />;
+      case "edit":
+        return <Editor tab={activeTab} searchQuery={findQuery} />;
+      case "split":
+        return <SplitView tab={activeTab} searchQuery={findQuery} />;
+      default:
+        return <Editor tab={activeTab} searchQuery={findQuery} />;
     }
   };
 
@@ -232,20 +336,63 @@ function App() {
     <div className="app-container">
       <div className="toolbar">
         <div className="toolbar-actions">
-          <button className="toolbar-btn" onClick={handleNewFile}><Icon.New /> New</button>
-          <button className="toolbar-btn" onClick={handleOpenFile} title="Open (Ctrl+O)"><Icon.Open /> Open</button>
-          <button className="toolbar-btn" onClick={handleOpenFind} title="Find (Ctrl+F)"><Icon.Find /> Find</button>
+          <button className="toolbar-btn" onClick={handleNewFile}>
+            <Icon.New /> New
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={handleOpenFile}
+            title="Open (Ctrl+O)"
+          >
+            <Icon.Open /> Open
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={handleOpenFind}
+            title="Find (Ctrl+F)"
+          >
+            <Icon.Find /> Find
+          </button>
           <div className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={handleSaveFile} title="Save (Ctrl+S)"><Icon.Save /> Save</button>
-          <button className="toolbar-btn" onClick={handleSaveAs} title="Save As (Ctrl+Shift+S)">Save as</button>
+          <button
+            className="toolbar-btn"
+            onClick={handleSaveFile}
+            title="Save (Ctrl+S)"
+          >
+            <Icon.Save /> Save
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={handleSaveAs}
+            title="Save As (Ctrl+Shift+S)"
+          >
+            Save as
+          </button>
           <div className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={handleExportPDF}><Icon.Export /> Export PDF</button>
+          <button className="toolbar-btn" onClick={handleExportPDF}>
+            <Icon.Export /> Export PDF
+          </button>
         </div>
         {activeTab && (
           <div className="mode-switcher">
-            <button className={`mode-btn${activeTab.mode === "edit"  ? " active" : ""}`} onClick={() => handleModeChange("edit")}>Edit</button>
-            <button className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`} onClick={() => handleModeChange("split")}>Split</button>
-            <button className={`mode-btn${activeTab.mode === "view"  ? " active" : ""}`} onClick={() => handleModeChange("view")}>Preview</button>
+            <button
+              className={`mode-btn${activeTab.mode === "edit" ? " active" : ""}`}
+              onClick={() => handleModeChange("edit")}
+            >
+              Edit
+            </button>
+            <button
+              className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`}
+              onClick={() => handleModeChange("split")}
+            >
+              Split
+            </button>
+            <button
+              className={`mode-btn${activeTab.mode === "view" ? " active" : ""}`}
+              onClick={() => handleModeChange("view")}
+            >
+              Preview
+            </button>
           </div>
         )}
       </div>
@@ -261,17 +408,27 @@ function App() {
             value={findQuery}
             onChange={(e) => setFindQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Escape") { setFindOpen(false); setFindQuery(""); }
+              if (e.key === "Escape") {
+                setFindOpen(false);
+                setFindQuery("");
+              }
             }}
           />
           {findQuery && (
-            <span className="find-clear" onClick={() => setFindQuery("")} title="Clear">
+            <span
+              className="find-clear"
+              onClick={() => setFindQuery("")}
+              title="Clear"
+            >
               <Icon.Close />
             </span>
           )}
           <button
             className="find-close"
-            onClick={() => { setFindOpen(false); setFindQuery(""); }}
+            onClick={() => {
+              setFindOpen(false);
+              setFindQuery("");
+            }}
             title="Close (Esc)"
           >
             <Icon.Close />

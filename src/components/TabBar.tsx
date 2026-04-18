@@ -2,12 +2,9 @@ import React from "react";
 import { useTabStore } from "../store/tabStore";
 import { Tab } from "./Tab";
 
-const log = (msg: string, data?: any) => {
-  if (import.meta.env.DEV) console.log(`[TabBar:${msg}]`, data ?? "");
-};
-
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, reorderTabs, closeTab, setActiveTab } = useTabStore();
+  const { tabs, activeTabId, reorderTabs, closeTab, setActiveTab } =
+    useTabStore();
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -28,7 +25,13 @@ export const TabBar: React.FC = () => {
   if (tabs.length === 0) {
     return (
       <div className="tab-bar">
-        <span style={{ padding: "0 4px", color: "var(--text-muted)", fontSize: "12px" }}>
+        <span
+          style={{
+            padding: "0 4px",
+            color: "var(--text-muted)",
+            fontSize: "12px",
+          }}
+        >
           No files open
         </span>
       </div>

@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useTabStore } from "../store/tabStore";
-import { listen } from "@tauri-apps/api/event";
 
 export const useKeyboardShortcuts = () => {
   const { tabs, activeTabId, closeTab, reopenLastClosed, updateTab } =
