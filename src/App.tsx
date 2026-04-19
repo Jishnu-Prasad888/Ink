@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { renderMarkdown } from "./utils/markdown";
 import html2pdf from "html2pdf.js";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 const log = (msg: string, data?: any) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
@@ -281,6 +282,9 @@ function App() {
       // 7. Write to disk via Rust
       await invoke("write_binary_file", { path: savePath, data: bytes });
       log("PDF exported", savePath);
+      
+      // Open the exported PDF
+      await openPath(savePath);
     } catch (err) {
       console.error("PDF export failed:", err);
     } finally {

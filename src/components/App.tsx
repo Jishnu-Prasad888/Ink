@@ -304,7 +304,6 @@ function App() {
     const pdf = new jsPDF("p", "mm", "a4");
 
     const pageWidth = 210;
-    const pageHeight = 297;
 
     const scale = 2; // high quality scaling
 
