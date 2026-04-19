@@ -8,6 +8,8 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useSingleInstance } from "./hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { renderMarkdown } from "./utils/markdown";
+import html2pdf from "html2pdf.js";
 
 const log = (msg: string, data?: any) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
@@ -134,7 +136,157 @@ function App() {
     }
   };
 
-  const handleExportPDF = () => { window.print(); };
+  const handleExportPDF = async () => {
+    if (!activeTab) return;
+
+    // 1. Ask the user where to save the PDF (native dialog)
+    const fileName = (activeTab.fileName || "document").replace(/\.(md|markdown)$/i, "");
+    let savePath: string | null = await invoke("save_pdf_dialog");
+    if (!savePath) return; // user cancelled
+    if (!savePath.toLowerCase().endsWith(".pdf")) savePath += ".pdf";
+
+    // 2. Render markdown to HTML
+    const htmlContent = await renderMarkdown(activeTab.content);
+
+    // 3. Build an off-screen styled container
+    const container = document.createElement("div");
+    container.style.position = "absolute";
+    container.style.left = "-99999px";
+    container.style.top = "0";
+    container.style.width = "210mm";
+    container.style.background = "#ffffff";
+    container.innerHTML = `
+      <style>
+        .pdf-export-body {
+          font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+          color: #1a1917;
+          line-height: 1.8;
+          padding: 0;
+          background: #ffffff;
+          font-size: 14px;
+        }
+        .pdf-export-body h1, .pdf-export-body h2, .pdf-export-body h3,
+        .pdf-export-body h4, .pdf-export-body h5, .pdf-export-body h6 {
+          color: #1a1917;
+          font-weight: 600;
+          margin: 1.4em 0 0.5em;
+          line-height: 1.3;
+          page-break-after: avoid;
+          break-after: avoid;
+        }
+        .pdf-export-body h1 { font-size: 1.85em; }
+        .pdf-export-body h2 { font-size: 1.35em; border-bottom: 1px solid #e4e3de; padding-bottom: 0.4em; }
+        .pdf-export-body h3 { font-size: 1.1em; }
+        .pdf-export-body p { margin: 0.65em 0; color: #37352f; font-size: 0.97em; }
+        .pdf-export-body a { color: #2d6be4; text-decoration: underline; }
+        .pdf-export-body code {
+          font-family: 'Consolas', 'Fira Code', monospace;
+          font-size: 0.84em;
+          background: #f5f5f5;
+          border: 1px solid #e0e0e0;
+          padding: 1px 5px;
+          border-radius: 4px;
+          color: #2d6be4;
+        }
+        .pdf-export-body pre {
+          background: #f6f8fa;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          padding: 14px 18px;
+          overflow-x: auto;
+          margin: 1em 0;
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+        .pdf-export-body pre code {
+          background: none;
+          border: none;
+          padding: 0;
+          color: #1a1917;
+          white-space: pre-wrap;
+          word-wrap: break-word;
+        }
+        .pdf-export-body blockquote {
+          border-left: 3px solid #cccbc5;
+          padding: 4px 0 4px 16px;
+          margin: 1em 0;
+          color: #6b6860;
+          font-style: italic;
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+        .pdf-export-body ul, .pdf-export-body ol {
+          padding-left: 1.5em;
+          color: #37352f;
+          margin: 0.65em 0;
+          font-size: 0.97em;
+        }
+        .pdf-export-body li { margin: 0.3em 0; }
+        .pdf-export-body hr { border: none; border-top: 1px solid #e4e3de; margin: 1.5em 0; }
+        .pdf-export-body table { 
+          width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; 
+          page-break-inside: avoid; break-inside: avoid;
+        }
+        .pdf-export-body th, .pdf-export-body td {
+          padding: 8px 12px;
+          border: 1px solid #e4e3de;
+          text-align: left;
+        }
+        .pdf-export-body th { background: #f6f8fa; color: #1a1917; font-weight: 600; }
+        .pdf-export-body td { color: #37352f; }
+        .pdf-export-body img { max-width: 100%; page-break-inside: avoid; break-inside: avoid; }
+        .pdf-export-body strong { color: #1a1917; font-weight: 600; }
+        .pdf-export-body .task-list-item { list-style: none; margin-left: -1.5em; padding-left: 1.5em; }
+        .pdf-export-body .task-list-item input[type="checkbox"] {
+          width: 13px; height: 13px;
+          margin-right: 8px;
+          vertical-align: middle;
+        }
+        .pdf-export-body .hljs { background: #f6f8fa; }
+        .page-break { page-break-before: always; }
+      </style>
+      <div class="pdf-export-body">${htmlContent}</div>
+    `;
+    document.body.appendChild(container);
+
+    // 4. Wait for rendering to settle
+    await new Promise((r) => setTimeout(r, 200));
+
+    const pdfElement = container.querySelector(".pdf-export-body") as HTMLElement;
+
+    try {
+      // 5. Generate PDF blob (html2pdf's .save() is broken in Tauri – use .output() instead)
+      const blob: Blob = await html2pdf()
+        .set({
+          margin: [12, 12, 12, 12],
+          filename: `${fileName}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            scrollX: 0,
+            scrollY: 0,
+          },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+        } as any)
+        .from(pdfElement)
+        .output("blob");
+
+      // 6. Convert blob → Uint8Array → plain number array for Tauri IPC
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(arrayBuffer));
+
+      // 7. Write to disk via Rust
+      await invoke("write_binary_file", { path: savePath, data: bytes });
+      log("PDF exported", savePath);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
 
   const handleModeChange = (mode: "view" | "edit" | "split") => {
     if (activeTab) updateTab(activeTab.id, { mode });

@@ -123,6 +123,55 @@ async fn get_file_info(path: String) -> Result<serde_json::Value, String> {
     Ok(result)
 }
 
+/// Opens a native save dialog filtered to PDF and returns the chosen path.
+#[tauri::command]
+async fn save_pdf_dialog(app: AppHandle) -> Result<Option<String>, String> {
+    #[cfg(debug_assertions)]
+    eprintln!("[RUST] save_pdf_dialog called");
+
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+
+    app.dialog()
+        .file()
+        .add_filter("PDF Document", &["pdf"])
+        .save_file(move |file| {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] dialog save pdf: {:?}", file);
+            let _ = tx.send(file);
+        });
+
+    match rx.recv() {
+        Ok(Some(file)) => {
+            let path = file.to_string();
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] save_pdf_dialog returning {:?}", path);
+            Ok(Some(path))
+        }
+        _ => Ok(None),
+    }
+}
+
+/// Writes raw binary bytes to a file (used for PDF export).
+#[tauri::command]
+async fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    eprintln!("[RUST] write_binary_file called, path: {}, bytes: {}", path, data.len());
+
+    match fs::write(&path, data) {
+        Ok(_) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] write_binary_file success");
+            Ok(())
+        }
+        Err(e) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] write_binary_file error: {}", e);
+            Err(e.to_string())
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -152,8 +201,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_file_dialog,
             save_file_dialog,
+            save_pdf_dialog,
             read_file,
             write_file,
+            write_binary_file,
             get_file_info,
         ])
         .run(tauri::generate_context!())

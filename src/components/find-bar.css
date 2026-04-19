@@ -74,3 +74,30 @@
   width: 13px;
   height: 13px;
 }
+
+/* PDF-specific styles */
+.pdf-target {
+  background: white;
+  color: black;
+  padding: 32px;
+  width: 800px;
+  margin: auto;
+  line-height: 1.6;
+}
+
+.pdf-target pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.pdf-target code {
+  font-family: "Fira Code", monospace;
+}
+
+/* Manual page break support */
+.page-break {
+  page-break-before: always;
+}

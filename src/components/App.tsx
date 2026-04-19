@@ -7,6 +7,8 @@ import { useTabStore } from "../store/tabStore";
 import { useSingleInstance } from "../hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const log = (msg: string, data?: any) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
@@ -100,6 +102,7 @@ function App() {
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const findInputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null); // 🧱 1. Add a preview ref
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   useSingleInstance();
@@ -289,8 +292,83 @@ function App() {
     }
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    if (!previewRef.current || !activeTab) return;
+
+    const element = previewRef.current;
+
+    // Wait for fonts + layout stabilization
+    await document.fonts.ready;
+    await new Promise((r) => setTimeout(r, 300));
+
+    const pdf = new jsPDF("p", "mm", "a4");
+
+    const pageWidth = 210;
+    const pageHeight = 297;
+
+    const scale = 2; // high quality scaling
+
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.style.width = element.scrollWidth + "px";
+    clone.style.background = "white";
+    clone.style.position = "absolute";
+    clone.style.left = "-99999px";
+    document.body.appendChild(clone);
+
+    // ✨ 5. Syntax highlighting (preserved)
+    clone.querySelectorAll("pre code").forEach((block) => {
+      (block as HTMLElement).style.whiteSpace = "pre-wrap";
+    });
+
+    const totalHeight = clone.scrollHeight;
+
+    let currentY = 0;
+    let pageIndex = 0;
+
+    // 🧠 4. Real page-break detection (smart improvement)
+    const findNextBreak = (container: HTMLElement, startY: number) => {
+      const breaks = container.querySelectorAll(".page-break");
+      for (const el of breaks) {
+        const rect = (el as HTMLElement).offsetTop;
+        if (rect > startY + 200 && rect < startY + 1200) {
+          return rect;
+        }
+      }
+      return null;
+    };
+
+    while (currentY < totalHeight) {
+      const nextBreak = findNextBreak(clone, currentY);
+      const sliceHeight = nextBreak
+        ? nextBreak - currentY
+        : clone.scrollWidth * 1.414; // approx A4 ratio
+
+      const canvas = await html2canvas(clone, {
+        scale,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        x: 0,
+        y: currentY,
+        width: clone.scrollWidth,
+        height: Math.min(clone.scrollHeight - currentY, sliceHeight),
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      if (pageIndex > 0) pdf.addPage();
+
+      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+
+      currentY += canvas.height / scale;
+      pageIndex++;
+    }
+
+    document.body.removeChild(clone);
+
+    pdf.save((activeTab.fileName || "document") + ".pdf");
   };
 
   const handleModeChange = (mode: "view" | "edit" | "split") => {
@@ -437,7 +515,16 @@ function App() {
       )}
 
       <TabBar />
-      <div className="content-area">{renderContent()}</div>
+      {/* 🧱 1. Wrap preview in ref */}
+      <div className="content-area">
+        {activeTab ? (
+          <div ref={previewRef} className="pdf-target">
+            <MarkdownPreview tab={activeTab} searchQuery={findQuery} />
+          </div>
+        ) : (
+          renderContent()
+        )}
+      </div>
 
       {isDragging && (
         <div className="drag-overlay">
