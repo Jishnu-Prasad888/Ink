@@ -172,9 +172,22 @@ async fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn get_opened_files(files: tauri::State<'_, Vec<String>>) -> Vec<String> {
+    files.inner().clone()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    let initial_files: Vec<String> = args
+        .into_iter()
+        .skip(1)
+        .filter(|arg| arg.ends_with(".md") || arg.ends_with(".markdown") || arg.ends_with(".txt"))
+        .collect();
+
     tauri::Builder::default()
+        .manage(initial_files)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -186,7 +199,10 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let files: Vec<String> = argv
                     .iter()
-                    .filter(|arg| arg.ends_with(".md") || arg.ends_with(".markdown"))
+                    .filter(|arg| {
+                        let lower = arg.to_lowercase();
+                        lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".txt")
+                    })
                     .map(|arg| arg.to_string())
                     .collect();
 
@@ -206,6 +222,7 @@ pub fn run() {
             write_file,
             write_binary_file,
             get_file_info,
+            get_opened_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -58,7 +58,8 @@ function App() {
       const files = Array.from(e.dataTransfer?.files || []);
       log("files dropped", files.map((f) => f.name));
       for (const file of files) {
-        if (file.name.endsWith(".md") || file.name.endsWith(".markdown")) {
+        const lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown") || lowerName.endsWith(".txt")) {
           const content = await file.text();
           addTab({ filePath: null, fileName: file.name, content, mode: "edit", isDirty: true });
         }
@@ -75,6 +76,29 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // 1. Check for files opened on startup
+    const checkInitialFiles = async () => {
+      try {
+        const files: string[] = await invoke("get_opened_files");
+        if (files && files.length > 0) {
+          log("Initial opened files", files);
+          for (const filePath of files) {
+            try {
+              const content: string = await invoke("read_file", { path: filePath });
+              const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+              addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
+            } catch (err) {
+              console.error("Failed to open initial file:", err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to get initially opened files:", err);
+      }
+    };
+    checkInitialFiles();
+
+    // 2. Listen for 'open-files' event (from subsequent instance attempts)
     const unlisten = listen("open-files", (event: any) => {
       const files: string[] = event.payload;
       log("open-files event", files);
