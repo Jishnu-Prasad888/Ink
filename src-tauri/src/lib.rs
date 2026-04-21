@@ -223,7 +223,138 @@ pub fn run() {
             write_binary_file,
             get_file_info,
             get_opened_files,
+            read_dir,
+            create_file,
+            create_dir,
+            delete_item,
+            read_file_binary,
+            open_folder_dialog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
+    use std::fs;
+
+    let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
+    let mut result = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        let path = entry.path().to_string_lossy().to_string();
+
+        // Only show directories and markdown/PDF files
+        let is_md_or_pdf = !file_type.is_dir() && 
+            (name.ends_with(".md") || name.ends_with(".markdown") || name.ends_with(".pdf"));
+        
+        if file_type.is_dir() || is_md_or_pdf {
+            result.push(serde_json::json!({
+                "name": name,
+                "path": path,
+                "is_dir": file_type.is_dir(),
+            }));
+        }
+    }
+    // Sort: directories first, then files
+    result.sort_by(|a, b| {
+        let a_dir = a["is_dir"].as_bool().unwrap_or(false);
+        let b_dir = b["is_dir"].as_bool().unwrap_or(false);
+        if a_dir && !b_dir {
+            std::cmp::Ordering::Less
+        } else if !a_dir && b_dir {
+            std::cmp::Ordering::Greater
+        } else {
+            a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or(""))
+        }
+    });
+    Ok(result)
+}
+
+#[tauri::command]
+async fn create_file(parent_path: String, name: String) -> Result<(), String> {
+    use std::fs::File;
+    use std::path::PathBuf;
+
+    let mut path = PathBuf::from(parent_path);
+    path.push(&name);
+    if !name.ends_with(".md") && !name.ends_with(".markdown") {
+        path.set_extension("md");
+    }
+    File::create(&path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn create_dir(parent_path: String, name: String) -> Result<(), String> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    let mut path = PathBuf::from(parent_path);
+    path.push(&name);
+    fs::create_dir(&path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn delete_item(path: String) -> Result<(), String> {
+    use std::fs;
+    let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
+    if metadata.is_dir() {
+        fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+    } else {
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn read_file_binary(path: String) -> Result<Vec<u8>, String> {
+    #[cfg(debug_assertions)]
+    eprintln!("[RUST] read_file_binary called with path: {}", path);
+
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] read_file_binary success, {} bytes", bytes.len());
+            Ok(bytes)
+        }
+        Err(e) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] read_file_binary error: {}", e);
+            Err(format!("Failed to read file: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+async fn open_folder_dialog(app: AppHandle) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = std::sync::mpsc::channel();
+    
+    app.dialog().file().pick_folders(move |folders| {
+        let _ = tx.send(folders);
+    });
+    
+    match rx.recv() {
+        Ok(Some(folders)) => {
+            let paths: Vec<String> = folders.iter().map(|p| p.to_string()).collect();
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] open_folder_dialog returning {:?}", paths);
+            Ok(paths)
+        }
+        Ok(None) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] open_folder_dialog cancelled");
+            Ok(vec![])
+        }
+        Err(_) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[RUST] open_folder_dialog channel error");
+            Ok(vec![])
+        }
+    }
 }

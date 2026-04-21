@@ -182,6 +182,7 @@ function App() {
             content,
             mode: "edit",
             isDirty: true,
+            type: "markdown",
           });
         }
       }
@@ -206,7 +207,14 @@ function App() {
           const content: string = await invoke("read_file", { path: filePath });
           const fileName =
             filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
-          addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
+          addTab({
+            filePath,
+            fileName,
+            content,
+            mode: "edit",
+            isDirty: false,
+            type: "markdown",
+          });
         } catch (error) {
           console.error("Failed to open file:", error);
         }
@@ -225,6 +233,7 @@ function App() {
       content: "# New Document\n\nStart writing...",
       mode: "edit",
       isDirty: false,
+      type: "markdown",
     });
   };
 
@@ -241,7 +250,14 @@ function App() {
       const content: string = await invoke("read_file", { path: filePath });
       const fileName =
         filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
-      addTab({ filePath, fileName, content, mode: "edit", isDirty: false });
+      addTab({
+        filePath,
+        fileName,
+        content,
+        mode: "edit",
+        isDirty: false,
+        type: "markdown",
+      });
     }
   };
 
@@ -271,6 +287,7 @@ function App() {
           filePath: savePath,
           fileName,
           isDirty: false,
+          type: "markdown",
         });
       }
     }
@@ -367,7 +384,7 @@ function App() {
 
     document.body.removeChild(clone);
 
-    pdf.save((activeTab.fileName || "document") + ".pdf");
+    pdf.save((activeTab?.fileName || "document") + ".pdf");
   };
 
   const handleModeChange = (mode: "view" | "edit" | "split") => {

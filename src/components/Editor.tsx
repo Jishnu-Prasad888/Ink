@@ -159,7 +159,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
     <div className="edit-mode" style={{ height: "100%", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <CodeMirror
         ref={editorRef}
-        value={tab.content}
+        value={tab.content ?? ""}
         onChange={handleChange}
         onFocus={handleFocus}
         theme={customTheme}
