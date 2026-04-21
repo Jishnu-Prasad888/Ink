@@ -25,7 +25,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   useEffect(() => {
     const render = async () => {
-      const rendered = await renderMarkdown(tab.content);
+      const rendered = await renderMarkdown(tab.content || "");
       setHtml(rendered);
     };
     render();
@@ -50,7 +50,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       checkbox.addEventListener("change", () => {
         const lineIndex = findLineIndexForTask(checkbox);
         if (lineIndex !== -1) {
-          const lines = tab.content.split("\n");
+          const lines = (tab.content || "").split("\n");
           const currentLine = lines[lineIndex];
           const newLine = currentLine.replace(
             /- \[[ x]\]/,
@@ -79,7 +79,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       for (let i = 0; i < items.length; i++) {
         if (items[i].contains(checkbox)) {
           const text = items[i].textContent || "";
-          const lines = tab.content.split("\n");
+          const lines = (tab.content || "").split("\n");
           return lines.findIndex((line) => line.includes(text.trim()));
         }
       }

@@ -12,10 +12,6 @@ interface FileNode {
   children?: FileNode[];
 }
 
-const log = (msg: string, data?: any) => {
-  if (import.meta.env.DEV) console.log(`[Sidebar] ${msg}`, data ?? "");
-};
-
 export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   isOpen,
   onClose,
