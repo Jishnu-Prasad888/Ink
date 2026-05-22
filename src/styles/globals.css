@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&display=swap');
-
+@import './split-view-additions.css';
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
