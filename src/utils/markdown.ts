@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
 import hljs from "highlight.js";
 import markdownItTaskLists from "markdown-it-task-lists";
 import markdownItFootnote from "markdown-it-footnote";
@@ -14,6 +15,7 @@ if (import.meta.env.DEV) {
 
 mermaid.initialize({
   startOnLoad: false,
+  securityLevel: "strict",
   theme: "base",
   themeVariables: {
     background: "#FFFFFF",
@@ -27,7 +29,9 @@ mermaid.initialize({
 });
 
 const md: MarkdownIt = new MarkdownIt({
-  html: true,
+  // Documents are untrusted input. Raw HTML is rendered as text rather than
+  // being allowed to execute inside the privileged Tauri webview.
+  html: false,
   linkify: true,
   typographer: true,
   highlight: function (str, lang) {
@@ -48,7 +52,7 @@ const md: MarkdownIt = new MarkdownIt({
   },
 });
 
-md.use(markdownItTaskLists);
+md.use(markdownItTaskLists, { enabled: true, label: true });
 md.use(markdownItFootnote);
 md.use(markdownItTexmath, {
   engine: katex,
@@ -62,10 +66,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const code = token.content.trim();
 
   if (token.info === "mermaid") {
-    const id = `mermaid-${Date.now()}-${idx}`;
-    if (import.meta.env.DEV)
-      console.log(`[mermaid] Rendering diagram with id: ${id}`);
-    return `<div class="mermaid" id="${id}">${code}</div>`;
+    return `<pre class="mermaid">${md.utils.escapeHtml(code)}</pre>`;
   }
   return defaultFence(tokens, idx, options, env, self);
 };
@@ -74,20 +75,19 @@ export const renderMarkdown = async (content: string): Promise<string> => {
   if (import.meta.env.DEV)
     console.log(`[renderMarkdown] Input length: ${content.length}`);
   let html = md.render(content);
-
-  // Add target="_blank" to all links
-  html = html.replace(
-    /<a\s+href=/g,
-    '<a target="_blank" rel="noopener noreferrer" href=',
-  );
+  html = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ALLOW_DATA_ATTR: false,
+    FORBID_TAGS: ["form", "iframe", "object", "style", "template"],
+  });
 
   if (import.meta.env.DEV)
     console.log(`[renderMarkdown] Output HTML length: ${html.length}`);
   return html;
 };
 
-export const renderMermaidDiagrams = async () => {
-  const elements = document.querySelectorAll<HTMLElement>(".mermaid");
+export const renderMermaidDiagrams = async (root: ParentNode) => {
+  const elements = root.querySelectorAll<HTMLElement>(".mermaid");
   if (import.meta.env.DEV)
     console.log(`[renderMermaid] Found ${elements.length} mermaid elements`);
   if (elements.length > 0) {

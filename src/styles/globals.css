@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&display=swap');
 @import './split-view-additions.css';
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -22,8 +21,8 @@
   --danger:         #c0392b;
   --danger-bg:      #fdf0ef;
 
-  --font-ui:        'Geist', system-ui, sans-serif;
-  --font-editor:    'Geist Mono', 'Fira Code', monospace;
+  --font-ui:        Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-editor:    'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
 
   font-family: var(--font-ui);
   font-size: 14px;

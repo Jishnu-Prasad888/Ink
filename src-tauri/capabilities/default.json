@@ -7,8 +7,6 @@
     "core:default",
     "core:event:allow-listen",
     "core:path:allow-basename",
-    "fs:default",
-    "fs:allow-read-file",
     "dialog:default",
     "opener:default"
   ]

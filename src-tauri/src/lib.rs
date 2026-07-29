@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Opens a file-picker dialog and returns the selected .md/.markdown paths.
@@ -84,7 +84,11 @@ async fn read_file(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn write_file(path: String, content: String) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    eprintln!("[RUST] write_file called, path: {}, content length: {}", path, content.len());
+    eprintln!(
+        "[RUST] write_file called, path: {}, content length: {}",
+        path,
+        content.len()
+    );
 
     match fs::write(&path, content) {
         Ok(_) => {
@@ -156,7 +160,11 @@ async fn save_pdf_dialog(app: AppHandle) -> Result<Option<String>, String> {
 #[tauri::command]
 async fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
     #[cfg(debug_assertions)]
-    eprintln!("[RUST] write_binary_file called, path: {}, bytes: {}", path, data.len());
+    eprintln!(
+        "[RUST] write_binary_file called, path: {}, bytes: {}",
+        path,
+        data.len()
+    );
 
     match fs::write(&path, data) {
         Ok(_) => {
@@ -188,10 +196,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(initial_files)
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             #[cfg(debug_assertions)]
             eprintln!("[RUST] single-instance triggered with argv: {:?}", argv);
@@ -201,7 +205,9 @@ pub fn run() {
                     .iter()
                     .filter(|arg| {
                         let lower = arg.to_lowercase();
-                        lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".txt")
+                        lower.ends_with(".md")
+                            || lower.ends_with(".markdown")
+                            || lower.ends_with(".txt")
                     })
                     .map(|arg| arg.to_string())
                     .collect();
@@ -214,6 +220,8 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_file_dialog,
             save_file_dialog,
@@ -248,9 +256,9 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
         let path = entry.path().to_string_lossy().to_string();
 
         // Only show directories and markdown/PDF files
-        let is_md_or_pdf = !file_type.is_dir() && 
-            (name.ends_with(".md") || name.ends_with(".markdown") || name.ends_with(".pdf"));
-        
+        let is_md_or_pdf = !file_type.is_dir()
+            && (name.ends_with(".md") || name.ends_with(".markdown") || name.ends_with(".pdf"));
+
         if file_type.is_dir() || is_md_or_pdf {
             result.push(serde_json::json!({
                 "name": name,
@@ -268,7 +276,10 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
         } else if !a_dir && b_dir {
             std::cmp::Ordering::Greater
         } else {
-            a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or(""))
+            a["name"]
+                .as_str()
+                .unwrap_or("")
+                .cmp(b["name"].as_str().unwrap_or(""))
         }
     });
     Ok(result)
@@ -276,15 +287,20 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
 
 #[tauri::command]
 async fn create_file(parent_path: String, name: String) -> Result<(), String> {
-    use std::fs::File;
+    use std::fs::OpenOptions;
     use std::path::PathBuf;
 
+    validate_child_name(&name)?;
     let mut path = PathBuf::from(parent_path);
     path.push(&name);
     if !name.ends_with(".md") && !name.ends_with(".markdown") {
         path.set_extension("md");
     }
-    File::create(&path).map_err(|e| e.to_string())?;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -293,10 +309,38 @@ async fn create_dir(parent_path: String, name: String) -> Result<(), String> {
     use std::fs;
     use std::path::PathBuf;
 
+    validate_child_name(&name)?;
     let mut path = PathBuf::from(parent_path);
     path.push(&name);
     fs::create_dir(&path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn validate_child_name(name: &str) -> Result<(), String> {
+    let mut components = Path::new(name).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) if !name.trim().is_empty() => Ok(()),
+        _ => Err("Name must be a single file or folder name".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_child_name;
+
+    #[test]
+    fn accepts_single_safe_component() {
+        assert!(validate_child_name("notes.md").is_ok());
+        assert!(validate_child_name("Project notes").is_ok());
+    }
+
+    #[test]
+    fn rejects_path_traversal_and_absolute_paths() {
+        assert!(validate_child_name("../notes.md").is_err());
+        assert!(validate_child_name("folder/notes.md").is_err());
+        assert!(validate_child_name("/tmp/notes.md").is_err());
+        assert!(validate_child_name(".").is_err());
+    }
 }
 
 #[tauri::command]
@@ -334,11 +378,11 @@ async fn read_file_binary(path: String) -> Result<Vec<u8>, String> {
 async fn open_folder_dialog(app: AppHandle) -> Result<Vec<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     let (tx, rx) = std::sync::mpsc::channel();
-    
+
     app.dialog().file().pick_folders(move |folders| {
         let _ = tx.send(folders);
     });
-    
+
     match rx.recv() {
         Ok(Some(folders)) => {
             let paths: Vec<String> = folders.iter().map(|p| p.to_string()).collect();

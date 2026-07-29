@@ -41,7 +41,9 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       }
     }
 
-    renderMermaidDiagrams();
+    renderMermaidDiagrams(previewRef.current).catch((error) => {
+      console.error("Failed to render Mermaid diagram", error);
+    });
 
     const taskItems = previewRef.current.querySelectorAll(
       ".task-list-item input",
@@ -115,16 +117,35 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   useEffect(() => {
     if (!previewRef.current) return;
 
-    const links = previewRef.current.querySelectorAll("a");
-    links.forEach((link) => {
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      // Remove any previous event listeners to avoid stacking
-      link.onclick = (e) => {
-        e.preventDefault();
-        openUrl(link.href);
-      };
-    });
+    const preview = previewRef.current;
+    const handleClick = (event: MouseEvent) => {
+      const link = (event.target as Element).closest<HTMLAnchorElement>("a");
+      if (!link || !preview.contains(link)) return;
+
+      const href = link.getAttribute("href");
+      if (!href) return;
+
+      if (href.startsWith("#")) {
+        event.preventDefault();
+        const target = preview.querySelector<HTMLElement>(
+          `#${CSS.escape(href.slice(1))}`,
+        );
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      if (href.startsWith("https://") || href.startsWith("http://")) {
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        event.preventDefault();
+        openUrl(href).catch((error) => {
+          console.error("Failed to open link", error);
+        });
+      }
+    };
+
+    preview.addEventListener("click", handleClick);
+    return () => preview.removeEventListener("click", handleClick);
   }, [html]);
 
   return (
