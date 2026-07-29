@@ -3,7 +3,13 @@ import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useTabStore } from "../store/tabStore";
-import { PlusIcon, TrashIcon, FolderPlusIcon } from "./Icons"; // we'll create simple SVG icons
+import {
+  FileIcon,
+  FolderIcon,
+  FolderPlusIcon,
+  PlusIcon,
+  TrashIcon,
+} from "./Icons";
 
 interface FileNode {
   name: string;
@@ -151,18 +157,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <ContextMenu.Trigger asChild>
           <div
             className="sidebar-item"
+            role="treeitem"
+            tabIndex={0}
+            aria-expanded={node.is_dir ? expanded.has(node.path) : undefined}
+            aria-level={level + 1}
             style={{ paddingLeft: `${level * 16 + 12}px` }}
             onClick={() =>
               node.is_dir ? toggleExpand(node.path) : handleFileClick(node)
             }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                if (node.is_dir) toggleExpand(node.path);
+                else void handleFileClick(node);
+              } else if (event.key === "ArrowRight" && node.is_dir) {
+                event.preventDefault();
+                if (!expanded.has(node.path)) toggleExpand(node.path);
+              } else if (event.key === "ArrowLeft" && node.is_dir) {
+                event.preventDefault();
+                if (expanded.has(node.path)) toggleExpand(node.path);
+              }
+            }}
           >
             {node.is_dir ? (
               <span className="sidebar-icon">
-                {expanded.has(node.path) ? "📂" : "📁"}
+                <FolderIcon />
               </span>
             ) : (
               <span className="sidebar-icon">
-                {node.name.toLowerCase().endsWith(".pdf") ? "📄" : "📝"}
+                <FileIcon />
               </span>
             )}
             <span className="sidebar-name">{node.name}</span>
@@ -175,25 +198,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
         <ContextMenu.Portal>
           <ContextMenu.Content className="context-menu-content">
-            <ContextMenu.Item
-              className="context-menu-item"
-              onSelect={() => {
-                const newName = prompt("Enter file name (without extension)");
-                if (newName) handleCreateFile(node.path, newName);
-              }}
-            >
-              <PlusIcon /> New File
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              className="context-menu-item"
-              onSelect={() => {
-                const newName = prompt("Enter folder name");
-                if (newName) handleCreateFolder(node.path, newName);
-              }}
-            >
-              <FolderPlusIcon /> New Folder
-            </ContextMenu.Item>
-            <ContextMenu.Separator className="context-menu-separator" />
+            {node.is_dir && (
+              <>
+                <ContextMenu.Item
+                  className="context-menu-item"
+                  onSelect={() => {
+                    const newName = prompt("Enter file name (without extension)");
+                    if (newName) void handleCreateFile(node.path, newName);
+                  }}
+                >
+                  <PlusIcon /> New File
+                </ContextMenu.Item>
+                <ContextMenu.Item
+                  className="context-menu-item"
+                  onSelect={() => {
+                    const newName = prompt("Enter folder name");
+                    if (newName) void handleCreateFolder(node.path, newName);
+                  }}
+                >
+                  <FolderPlusIcon /> New Folder
+                </ContextMenu.Item>
+                <ContextMenu.Separator className="context-menu-separator" />
+              </>
+            )}
             <ContextMenu.Item
               className="context-menu-item destructive"
               onSelect={() => handleDelete(node.path)}
@@ -240,10 +267,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="sidebar">
+    <aside className="sidebar" aria-label="Explorer">
       <div className="sidebar-header">
-        <h3>Explorer</h3>
-        <button className="sidebar-close" onClick={onClose}>
+        <div>
+          <h3>Explorer</h3>
+          {rootFolder && (
+            <span className="sidebar-root" title={rootFolder}>
+              {rootFolder.replace(/\\/g, "/").split("/").pop()}
+            </span>
+          )}
+        </div>
+        <button className="sidebar-close" onClick={onClose} aria-label="Close Explorer">
           ×
         </button>
       </div>
@@ -251,14 +285,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button onClick={handleOpenFolder} className="sidebar-btn">
           Open Folder
         </button>
+        {rootFolder && (
+          <>
+            <button
+              className="sidebar-icon-btn"
+              title="New Markdown file"
+              aria-label="New Markdown file"
+              onClick={() => {
+                const name = prompt("Enter file name (without extension)");
+                if (name) void handleCreateFile(rootFolder, name);
+              }}
+            >
+              <PlusIcon />
+            </button>
+            <button
+              className="sidebar-icon-btn"
+              title="New folder"
+              aria-label="New folder"
+              onClick={() => {
+                const name = prompt("Enter folder name");
+                if (name) void handleCreateFolder(rootFolder, name);
+              }}
+            >
+              <FolderPlusIcon />
+            </button>
+            <button
+              className="sidebar-icon-btn"
+              title="Refresh Explorer"
+              aria-label="Refresh Explorer"
+              onClick={() => void loadTree(rootFolder)}
+            >
+              ↻
+            </button>
+          </>
+        )}
       </div>
-      <div className="sidebar-tree">
+      <div className="sidebar-tree" role="tree" aria-label="Files">
         {rootFolder ? (
           renderTree(tree)
         ) : (
           <div className="sidebar-placeholder">No folder open</div>
         )}
       </div>
-    </div>
+    </aside>
   );
 };

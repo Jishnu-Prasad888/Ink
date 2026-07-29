@@ -13,22 +13,15 @@ const log = (msg: string, data?: any) => {
   if (import.meta.env.DEV) console.log(`[Editor:${msg}]`, data ?? "");
 };
 
-export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
-  const saveTabContent = useTabStore((state) => state.saveTabContent);
-  const updateTab = useTabStore((state) => state.updateTab);
-  const editorRef = useRef<any>(null);
-
-  log("mount", { tabId: tab.id, fileName: tab.fileName });
-
-  const customTheme = EditorView.theme({
+const customTheme = EditorView.theme({
     "&": {
-      backgroundColor: "#ffffff",
-      color: "#1a1917",
+      backgroundColor: "var(--surface)",
+      color: "var(--text-primary)",
       height: "100%",
     },
-    "&.cm-focused": { outline: "none" },
+    "&.cm-focused": { outline: "1px solid var(--accent-border)" },
     ".cm-scroller": {
-      fontFamily: "'Geist Mono', 'Fira Code', monospace",
+      fontFamily: "var(--font-editor)",
       fontSize: "13.5px",
       lineHeight: "1.75",
       // Must be "auto" (not hidden/clip) so the native scrollbar renders.
@@ -36,65 +29,72 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
     },
     ".cm-content": {
       padding: "24px 28px",
-      caretColor: "#2d6be4",
+      caretColor: "var(--accent)",
     },
     ".cm-gutters": {
-      backgroundColor: "#fafaf8",
-      borderRight: "1px solid #e4e3de",
-      color: "#cccbc5",
+      backgroundColor: "var(--surface-raised)",
+      borderRight: "1px solid var(--border)",
+      color: "var(--text-muted)",
       minWidth: "48px",
       paddingRight: "8px",
     },
-    ".cm-gutter": { backgroundColor: "#fafaf8" },
+    ".cm-gutter": { backgroundColor: "var(--surface-raised)" },
     ".cm-lineNumbers .cm-gutterElement": { fontSize: "11.5px" },
-    ".cm-activeLine": { backgroundColor: "#f7f6f3" },
+    ".cm-activeLine": { backgroundColor: "var(--bg)" },
     ".cm-activeLineGutter": {
-      backgroundColor: "#f2f1ee",
-      color: "#a09e99",
+      backgroundColor: "var(--surface-hover)",
+      color: "var(--text-secondary)",
     },
     ".cm-selectionBackground, ::selection": {
-      backgroundColor: "#dce9fb !important",
+      backgroundColor: "var(--accent-bg) !important",
     },
     ".cm-cursor": {
-      borderLeftColor: "#2d6be4",
+      borderLeftColor: "var(--accent)",
       borderLeftWidth: "2px",
     },
     ".cm-matchingBracket": {
-      backgroundColor: "#eef3fd",
-      outline: "1px solid #c3d4f8",
+      backgroundColor: "var(--accent-bg)",
+      outline: "1px solid var(--accent-border)",
     },
     ".cm-foldPlaceholder": {
-      background: "#eef3fd",
-      border: "1px solid #c3d4f8",
-      color: "#2d6be4",
+      background: "var(--accent-bg)",
+      border: "1px solid var(--accent-border)",
+      color: "var(--accent)",
       borderRadius: "3px",
       padding: "0 4px",
     },
     ".cm-tooltip": {
-      background: "#ffffff",
-      border: "1px solid #e4e3de",
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
       borderRadius: "6px",
       boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
     },
     ".cm-tooltip-autocomplete": {
       "& > ul > li[aria-selected]": {
-        background: "#eef3fd",
-        color: "#1a1917",
+        background: "var(--accent-bg)",
+        color: "var(--text-primary)",
       },
     },
     // Markdown syntax
-    ".cm-header":   { color: "#1a1917", fontWeight: "500" },
+    ".cm-header":   { color: "var(--text-primary)", fontWeight: "500" },
     ".cm-header-1": { fontSize: "1.12em" },
     ".cm-header-2": { fontSize: "1.05em" },
-    ".cm-strong":   { color: "#1a1917", fontWeight: "600" },
-    ".cm-em":       { color: "#6b6860", fontStyle: "italic" },
-    ".cm-link":     { color: "#2d6be4" },
-    ".cm-url":      { color: "#6b9ff0" },
-    ".cm-quote":    { color: "#a09e99", fontStyle: "italic" },
-    ".cm-code":     { color: "#2d6be4", background: "#f0f4fd", borderRadius: "3px" },
-    ".cm-hr":       { color: "#cccbc5" },
-    ".cm-list":     { color: "#6b6860" },
+    ".cm-strong":   { color: "var(--text-primary)", fontWeight: "600" },
+    ".cm-em":       { color: "var(--text-secondary)", fontStyle: "italic" },
+    ".cm-link":     { color: "var(--accent)" },
+    ".cm-url":      { color: "var(--accent)" },
+    ".cm-quote":    { color: "var(--text-muted)", fontStyle: "italic" },
+    ".cm-code":     { color: "var(--accent)", background: "var(--accent-bg)", borderRadius: "3px" },
+    ".cm-hr":       { color: "var(--border-strong)" },
+    ".cm-list":     { color: "var(--text-secondary)" },
   });
+
+export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
+  const saveTabContent = useTabStore((state) => state.saveTabContent);
+  const updateTab = useTabStore((state) => state.updateTab);
+  const editorRef = useRef<any>(null);
+
+  log("mount", { tabId: tab.id, fileName: tab.fileName });
 
   const handleChange = (value: string) => {
     log("change", { length: value.length });
@@ -162,6 +162,13 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
         value={tab.content ?? ""}
         onChange={handleChange}
         onFocus={handleFocus}
+        onUpdate={(update) => {
+          if (update.selectionSet) {
+            updateTab(tab.id, {
+              cursorPosition: update.state.selection.main.head,
+            });
+          }
+        }}
         theme={customTheme}
         extensions={[markdown(), EditorView.lineWrapping]}
         style={{ flex: 1, minHeight: 0, overflow: "hidden" }}

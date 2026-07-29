@@ -27,6 +27,8 @@ interface PendingClose {
   closeWindow: boolean;
 }
 
+type Theme = "light" | "dark" | "system";
+
 const log = (msg: string, data?: any) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
 };
@@ -158,6 +160,12 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
+  const [theme, setTheme] = useState<Theme>(() =>
+    (localStorage.getItem("ink-theme") as Theme | null) ?? "system",
+  );
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+  const [commandIndex, setCommandIndex] = useState(0);
   const allowWindowClose = useRef(false);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
@@ -169,6 +177,11 @@ function App() {
   const requestCloseRef = useRef<(tabIds: string[]) => void>(() => {});
 
   useSingleInstance();
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("ink-theme", theme);
+  }, [theme]);
 
   // ── File operations ──────────────────────────────────────────────────────
 
@@ -197,11 +210,30 @@ function App() {
       return;
     }
 
+    const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+    if (filePath.toLowerCase().endsWith(".pdf")) {
+      addTab({
+        filePath,
+        fileName,
+        content: null,
+        mode: "view",
+        isDirty: false,
+        type: "pdf",
+      });
+      return;
+    }
+
     const [content, info] = await Promise.all([
       invoke<string>("read_file", { path: filePath }),
       invoke<FileInfo>("get_file_info", { path: filePath }),
     ]);
-    const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+    const openedWhileReading = useTabStore.getState().tabs.find(
+      (tab) => tab.filePath === filePath,
+    );
+    if (openedWhileReading) {
+      useTabStore.getState().setActiveTab(openedWhileReading.id);
+      return;
+    }
     addTab({
       filePath,
       fileName,
@@ -376,20 +408,34 @@ function App() {
   useEffect(() => {
     const onKeyDown = async (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      if (ctrl && e.shiftKey && key === "p") {
+        e.preventDefault();
+        setCommandPaletteOpen((open) => !open);
+        setCommandQuery("");
+        setCommandIndex(0);
+        return;
+      }
+      if (ctrl && key === "b") {
+        e.preventDefault();
+        setSidebarOpen((open) => !open);
+        return;
+      }
 
       // Ctrl+S / Ctrl+Shift+S
-      if (ctrl && e.key === "s") {
+      if (ctrl && key === "s") {
         e.preventDefault();
         if (e.shiftKey) await handleSaveAsRef.current();
         else await handleSaveFileRef.current();
         return;
       }
       // Ctrl+O
-      if (ctrl && e.key === "o") { e.preventDefault(); await handleOpenFileRef.current(); return; }
+      if (ctrl && key === "o") { e.preventDefault(); await handleOpenFileRef.current(); return; }
       // Ctrl+N
-      if (ctrl && e.key === "n") { e.preventDefault(); handleNewFileRef.current(); return; }
+      if (ctrl && key === "n") { e.preventDefault(); handleNewFileRef.current(); return; }
       // Ctrl+W
-      if (ctrl && e.key === "w") {
+      if (ctrl && key === "w") {
         e.preventDefault();
         const { activeTabId: aid } = useTabStore.getState();
         if (aid) requestCloseRef.current([aid]);
@@ -401,22 +447,22 @@ function App() {
         const { tabs: t, activeTabId: aid } = useTabStore.getState();
         if (t.length > 1 && aid) {
           const idx = t.findIndex((x) => x.id === aid);
-          const next = (idx + 1) % t.length;
+          const next = (idx + (e.shiftKey ? -1 : 1) + t.length) % t.length;
           setActiveTab(t[next].id);
         }
         return;
       }
       // Ctrl+Shift+T — reopen last closed
-      if (ctrl && e.shiftKey && e.key === "T") { e.preventDefault(); reopenLastClosed(); return; }
+      if (ctrl && e.shiftKey && key === "t") { e.preventDefault(); reopenLastClosed(); return; }
 
       // Ctrl+1/2/3 — mode switching for active tab
       if (ctrl && !e.shiftKey) {
         const { activeTabId: aid, tabs: t, updateTab: ut } = useTabStore.getState();
         const tab = t.find((x) => x.id === aid);
         if (!tab) return;
-        if (e.key === "1") { e.preventDefault(); ut(tab.id, { mode: "view"  }); }
-        if (e.key === "2") { e.preventDefault(); ut(tab.id, { mode: "edit"  }); }
-        if (e.key === "3") { e.preventDefault(); ut(tab.id, { mode: "split" }); }
+        if (e.key === "1") { e.preventDefault(); ut(tab.id, { mode: "edit"  }); }
+        if (e.key === "2") { e.preventDefault(); ut(tab.id, { mode: "split" }); }
+        if (e.key === "3") { e.preventDefault(); ut(tab.id, { mode: "view"  }); }
       }
     };
 
@@ -426,7 +472,11 @@ function App() {
 
   // ── Drag & drop ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const onDragOver  = (e: DragEvent) => { e.preventDefault(); setIsDragging(true); };
+    const onDragOver  = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      setIsDragging(true);
+    };
     const onDragLeave = (e: DragEvent) => { e.preventDefault(); setIsDragging(false); };
     const onDrop = async (e: DragEvent) => {
       e.preventDefault(); setIsDragging(false);
@@ -522,11 +572,54 @@ function App() {
     );
   };
 
+  const commands = [
+    { label: "File: New Document", shortcut: "Ctrl+N", run: handleNewFile },
+    { label: "File: Open Document", shortcut: "Ctrl+O", run: () => void handleOpenFile() },
+    { label: "File: Save", shortcut: "Ctrl+S", run: () => void handleSaveFile() },
+    {
+      label: sidebarOpen ? "View: Hide Explorer" : "View: Show Explorer",
+      shortcut: "Ctrl+B",
+      run: () => setSidebarOpen((open) => !open),
+    },
+    { label: "View: Edit", shortcut: "Ctrl+1", run: () => handleModeChange("edit") },
+    { label: "View: Preview to Side", shortcut: "Ctrl+2", run: () => handleModeChange("split") },
+    { label: "View: Preview", shortcut: "Ctrl+3", run: () => handleModeChange("view") },
+    { label: "Theme: Light", shortcut: "", run: () => setTheme("light") },
+    { label: "Theme: Dark", shortcut: "", run: () => setTheme("dark") },
+    { label: "Theme: Use System", shortcut: "", run: () => setTheme("system") },
+  ];
+  const visibleCommands = commands.filter((command) =>
+    command.label.toLowerCase().includes(commandQuery.trim().toLowerCase()),
+  );
+  const runCommand = (index: number) => {
+    const command = visibleCommands[index];
+    if (!command) return;
+    command.run();
+    setCommandPaletteOpen(false);
+    setCommandQuery("");
+    setCommandIndex(0);
+  };
+
+  const activeContent = activeTab?.type === "markdown" ? activeTab.content ?? "" : "";
+  const cursorPosition = Math.min(activeTab?.cursorPosition ?? 0, activeContent.length);
+  const beforeCursor = activeContent.slice(0, cursorPosition);
+  const line = beforeCursor.split("\n").length;
+  const column = cursorPosition - beforeCursor.lastIndexOf("\n");
+  const wordCount = activeContent.trim()
+    ? activeContent.trim().split(/\s+/).length
+    : 0;
+
   return (
     <div className="app-container">
       {/* ── Toolbar ── */}
-      <div className="toolbar">
-        <button className="toolbar-btn" onClick={() => setSidebarOpen(!sidebarOpen)} title="Toggle sidebar">
+      <header className="toolbar" role="toolbar" aria-label="Application toolbar">
+        <button
+          className="toolbar-btn"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          title="Toggle Explorer (Ctrl+B)"
+          aria-label="Toggle Explorer"
+          aria-expanded={sidebarOpen}
+        >
           <Icon.Menu />
         </button>
 
@@ -562,16 +655,16 @@ function App() {
               <button
                 className="toolbar-btn"
                 onClick={() => enableSplitLayout("horizontal")}
-                title="Split view side by side"
+                title="Open editor group to the right"
               >
-                <Icon.SplitH /> Split ↔
+                <Icon.SplitH /> Split Right
               </button>
               <button
                 className="toolbar-btn"
                 onClick={() => enableSplitLayout("vertical")}
-                title="Split view top and bottom"
+                title="Open editor group below"
               >
-                <Icon.SplitV /> Split ↕
+                <Icon.SplitV /> Split Down
               </button>
             </>
           ) : (
@@ -580,6 +673,7 @@ function App() {
                 className={`toolbar-btn${splitLayout.direction === "horizontal" ? " active" : ""}`}
                 onClick={() => setSplitDirection("horizontal")}
                 title="Side by side"
+                aria-pressed={splitLayout.direction === "horizontal"}
               >
                 <Icon.SplitH />
               </button>
@@ -587,6 +681,7 @@ function App() {
                 className={`toolbar-btn${splitLayout.direction === "vertical" ? " active" : ""}`}
                 onClick={() => setSplitDirection("vertical")}
                 title="Top / bottom"
+                aria-pressed={splitLayout.direction === "vertical"}
               >
                 <Icon.SplitV />
               </button>
@@ -599,19 +694,42 @@ function App() {
               </button>
             </>
           )}
+          <div className="toolbar-divider" />
+          <button
+            className="toolbar-btn"
+            onClick={() => {
+              setCommandPaletteOpen(true);
+              setCommandQuery("");
+              setCommandIndex(0);
+            }}
+            title="Command Palette (Ctrl+Shift+P)"
+          >
+            Commands
+          </button>
+          <button
+            className="toolbar-btn theme-button"
+            onClick={() =>
+              setTheme((current) =>
+                current === "light" ? "dark" : current === "dark" ? "system" : "light",
+              )
+            }
+            title="Cycle color theme"
+          >
+            {theme === "system" ? "System theme" : `${theme[0].toUpperCase()}${theme.slice(1)} theme`}
+          </button>
         </div>
 
         {activeTab?.type === "markdown" && !splitLayout.enabled && (
           <div className="mode-switcher">
-            <button className={`mode-btn${activeTab.mode === "edit"  ? " active" : ""}`} onClick={() => handleModeChange("edit")}>Edit</button>
-            <button className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`} onClick={() => handleModeChange("split")}>Split</button>
-            <button className={`mode-btn${activeTab.mode === "view"  ? " active" : ""}`} onClick={() => handleModeChange("view")}>Preview</button>
+            <button aria-pressed={activeTab.mode === "edit"} className={`mode-btn${activeTab.mode === "edit"  ? " active" : ""}`} onClick={() => handleModeChange("edit")}>Edit</button>
+            <button aria-pressed={activeTab.mode === "split"} className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`} onClick={() => handleModeChange("split")}>Preview to Side</button>
+            <button aria-pressed={activeTab.mode === "view"} className={`mode-btn${activeTab.mode === "view"  ? " active" : ""}`} onClick={() => handleModeChange("view")}>Preview</button>
           </div>
         )}
-      </div>
+      </header>
 
       {/* ── Main layout ── */}
-      <div className="main-layout">
+      <main className="main-layout">
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
@@ -621,13 +739,96 @@ function App() {
           {!splitLayout.enabled && (
             <TabBar onRequestClose={(id) => requestClose([id])} />
           )}
-          <div className="content-area">{renderContent()}</div>
+          <div
+            id="editor-content"
+            className="content-area"
+            role="tabpanel"
+            aria-labelledby={activeTab ? `tab-${activeTab.id}` : undefined}
+          >
+            {renderContent()}
+          </div>
         </div>
-      </div>
+      </main>
+
+      <footer className="status-bar" aria-label="Document status">
+        <span>
+          {activeTab
+            ? `${activeTab.fileName}${activeTab.isDirty ? " - Unsaved" : " - Saved"}`
+            : "No document open"}
+        </span>
+        {activeTab?.type === "markdown" && (
+          <span>Ln {line}, Col {column} | {wordCount} words | Markdown</span>
+        )}
+      </footer>
 
       {isDragging && (
         <div className="drag-overlay">
           <div className="drag-overlay-inner">Drop .md files to open</div>
+        </div>
+      )}
+
+      {commandPaletteOpen && (
+        <div
+          className="command-palette-backdrop"
+          role="presentation"
+          onMouseDown={() => setCommandPaletteOpen(false)}
+        >
+          <div
+            className="command-palette"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command Palette"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <input
+              autoFocus
+              value={commandQuery}
+              placeholder="Type a command"
+              aria-label="Search commands"
+              aria-controls="command-list"
+              aria-activedescendant={
+                visibleCommands[commandIndex] ? `command-${commandIndex}` : undefined
+              }
+              onChange={(event) => {
+                setCommandQuery(event.target.value);
+                setCommandIndex(0);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setCommandPaletteOpen(false);
+                else if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setCommandIndex((index) =>
+                    Math.min(index + 1, visibleCommands.length - 1),
+                  );
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setCommandIndex((index) => Math.max(index - 1, 0));
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  runCommand(commandIndex);
+                }
+              }}
+            />
+            <div id="command-list" className="command-list" role="listbox">
+              {visibleCommands.map((command, index) => (
+                <button
+                  key={command.label}
+                  id={`command-${index}`}
+                  role="option"
+                  aria-selected={index === commandIndex}
+                  className={index === commandIndex ? "active" : ""}
+                  onMouseEnter={() => setCommandIndex(index)}
+                  onClick={() => runCommand(index)}
+                >
+                  <span>{command.label}</span>
+                  {command.shortcut && <kbd>{command.shortcut}</kbd>}
+                </button>
+              ))}
+              {visibleCommands.length === 0 && (
+                <p className="command-empty">No matching commands</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

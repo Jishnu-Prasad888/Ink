@@ -21,11 +21,12 @@ export const ResizableSplitPane: React.FC<ResizableSplitPaneProps> = ({
   const startPos = useRef(0);
   const startSplit = useRef(initialSplit);
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent) => {
+      event.preventDefault();
       isDragging.current = true;
-      startPos.current = direction === "horizontal" ? e.clientX : e.clientY;
+      startPos.current =
+        direction === "horizontal" ? event.clientX : event.clientY;
       startSplit.current = split;
       document.body.style.cursor =
         direction === "horizontal" ? "col-resize" : "row-resize";
@@ -35,15 +36,15 @@ export const ResizableSplitPane: React.FC<ResizableSplitPaneProps> = ({
   );
 
   useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
+    const onPointerMove = (event: PointerEvent) => {
       if (!isDragging.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const total =
         direction === "horizontal" ? rect.width : rect.height;
       const delta =
         direction === "horizontal"
-          ? e.clientX - startPos.current
-          : e.clientY - startPos.current;
+          ? event.clientX - startPos.current
+          : event.clientY - startPos.current;
       const deltaPct = (delta / total) * 100;
       const newSplit = Math.max(
         (minSize / total) * 100,
@@ -52,18 +53,20 @@ export const ResizableSplitPane: React.FC<ResizableSplitPaneProps> = ({
       setSplit(newSplit);
     };
 
-    const onMouseUp = () => {
+    const onPointerUp = () => {
       if (!isDragging.current) return;
       isDragging.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
 
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
     return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
   }, [direction, minSize]);
 
@@ -98,7 +101,30 @@ export const ResizableSplitPane: React.FC<ResizableSplitPaneProps> = ({
       {/* Divider */}
       <div
         className={`split-divider ${isHorizontal ? "split-divider-h" : "split-divider-v"}`}
-        onMouseDown={onMouseDown}
+        role="separator"
+        aria-label="Resize editor groups"
+        aria-orientation={isHorizontal ? "vertical" : "horizontal"}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(split)}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onDoubleClick={() => setSplit(50)}
+        onKeyDown={(event) => {
+          const decrease = isHorizontal ? "ArrowLeft" : "ArrowUp";
+          const increase = isHorizontal ? "ArrowRight" : "ArrowDown";
+          if (event.key === decrease || event.key === increase) {
+            event.preventDefault();
+            const delta = event.key === decrease ? -2 : 2;
+            setSplit((value) => Math.max(10, Math.min(90, value + delta)));
+          } else if (event.key === "Home") {
+            event.preventDefault();
+            setSplit(25);
+          } else if (event.key === "End") {
+            event.preventDefault();
+            setSplit(75);
+          }
+        }}
       >
         <div className="split-divider-handle" />
       </div>

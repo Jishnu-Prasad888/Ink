@@ -102,9 +102,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
     return (
       <div
         className="pdf-loading"
+        role="alert"
         style={{ color: "var(--danger)", flexDirection: "column", gap: "12px" }}
       >
-        <div>⚠️ Error</div>
+        <div>PDF error</div>
         <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
           {error}
         </div>
@@ -114,15 +115,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
 
   if (loading || !blobUrl) {
     return (
-      <div className="pdf-loading">
+      <div className="pdf-loading" role="status" aria-live="polite">
         <div>Loading PDF...</div>
       </div>
     );
   }
 
   return (
-    <div className="pdf-viewer">
-      <div className="pdf-toolbar">
+    <div className="pdf-viewer" aria-busy={loading}>
+      <div className="pdf-toolbar" role="toolbar" aria-label="PDF navigation">
         <button
           disabled={pageNumber <= 1}
           onClick={() => setPageNumber(pageNumber - 1)}

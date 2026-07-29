@@ -22,7 +22,8 @@
 }
 
 .split-divider:hover,
-.split-divider:active {
+.split-divider:active,
+.split-divider:focus-visible {
   background: var(--accent-border);
 }
 
@@ -43,6 +44,10 @@
 }
 
 .split-divider:hover .split-divider-handle {
+  background: var(--accent);
+}
+
+.split-divider:focus-visible .split-divider-handle {
   background: var(--accent);
 }
 

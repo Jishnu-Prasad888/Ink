@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Opens a file-picker dialog and returns the selected .md/.markdown paths.
+/// Opens a file-picker dialog for documents supported by the workspace.
 #[tauri::command]
 async fn open_file_dialog(app: AppHandle) -> Result<Vec<String>, String> {
     #[cfg(debug_assertions)]
@@ -17,7 +17,7 @@ async fn open_file_dialog(app: AppHandle) -> Result<Vec<String>, String> {
 
     app.dialog()
         .file()
-        .add_filter("Markdown", &["md", "markdown"])
+        .add_filter("Documents", &["md", "markdown", "txt", "pdf"])
         .pick_files(move |files| {
             #[cfg(debug_assertions)]
             eprintln!("[RUST] dialog picked files: {:?}", files);
@@ -239,7 +239,13 @@ pub fn run() {
     let initial_files: Vec<String> = args
         .into_iter()
         .skip(1)
-        .filter(|arg| arg.ends_with(".md") || arg.ends_with(".markdown") || arg.ends_with(".txt"))
+        .filter(|arg| {
+            let lower = arg.to_lowercase();
+            lower.ends_with(".md")
+                || lower.ends_with(".markdown")
+                || lower.ends_with(".txt")
+                || lower.ends_with(".pdf")
+        })
         .collect();
 
     tauri::Builder::default()
@@ -256,6 +262,7 @@ pub fn run() {
                         lower.ends_with(".md")
                             || lower.ends_with(".markdown")
                             || lower.ends_with(".txt")
+                            || lower.ends_with(".pdf")
                     })
                     .map(|arg| arg.to_string())
                     .collect();
@@ -304,10 +311,14 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
         let path = entry.path().to_string_lossy().to_string();
 
         // Only show directories and markdown/PDF files
-        let is_md_or_pdf = !file_type.is_dir()
-            && (name.ends_with(".md") || name.ends_with(".markdown") || name.ends_with(".pdf"));
+        let lower_name = name.to_lowercase();
+        let is_supported = !file_type.is_dir()
+            && (lower_name.ends_with(".md")
+                || lower_name.ends_with(".markdown")
+                || lower_name.ends_with(".txt")
+                || lower_name.ends_with(".pdf"));
 
-        if file_type.is_dir() || is_md_or_pdf {
+        if file_type.is_dir() || is_supported {
             result.push(serde_json::json!({
                 "name": name,
                 "path": path,

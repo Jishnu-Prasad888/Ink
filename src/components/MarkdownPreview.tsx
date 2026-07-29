@@ -139,27 +139,12 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   }, [html]);
 
   return (
-    <div style={{ position: "relative", height: "100%" }}>
-      {/* Floating Toggle */}
-      <div
-        style={{
-          position: "absolute",
-          top: 12,
-          right: 16,
-          zIndex: 10,
-        }}
-      >
+    <div className="preview-container">
+      <div className="preview-toolbar">
         <button
+          className="preview-width-toggle"
           onClick={() => setIsFullWidth((prev) => !prev)}
-          style={{
-            padding: "6px 10px",
-            fontSize: "12px",
-            borderRadius: "6px",
-            border: "1px solid #ccc",
-            background: "#fff",
-            cursor: "pointer",
-            boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
-          }}
+          aria-pressed={isFullWidth}
         >
           {isFullWidth ? "Readable Width" : "Full Width"}
         </button>
