@@ -10,6 +10,10 @@ export interface Tab {
   content: string | null; // for markdown only
   mode: "view" | "edit" | "split";
   isDirty: boolean;
+  savedContent?: string | null;
+  revision?: number;
+  diskModifiedAt?: number;
+  diskFingerprint?: string;
   cursorPosition?: number;
   scrollPosition?: number;
   previewScrollPosition?: number;
@@ -35,7 +39,10 @@ interface TabStore {
   closedTabs: Tab[];
   splitLayout: SplitLayout;
 
-  addTab: (tab: Omit<Tab, "id">) => void;
+  addTab: (
+    tab: Omit<Tab, "id" | "savedContent" | "revision"> &
+      Partial<Pick<Tab, "savedContent" | "revision">>,
+  ) => void;
   updateTab: (id: string, updates: Partial<Tab>) => void;
   closeTab: (id: string) => void;
   closeAllTabs: () => void;
@@ -44,6 +51,11 @@ interface TabStore {
   reorderTabs: (startIndex: number, endIndex: number) => void;
   reopenLastClosed: () => void;
   saveTabContent: (id: string, content: string) => void;
+  markTabSaved: (
+    id: string,
+    savedContent: string,
+    updates?: Partial<Tab>,
+  ) => void;
 
   // Split-file view actions
   enableSplitLayout: (direction: "horizontal" | "vertical") => void;
@@ -69,7 +81,13 @@ export const useTabStore = create<TabStore>()(
       splitLayout: defaultSplitLayout,
 
       addTab: (tab) => {
-        const newTab = { ...tab, id: crypto.randomUUID() };
+        const newTab: Tab = {
+          ...tab,
+          id: crypto.randomUUID(),
+          revision: tab.revision ?? 0,
+          savedContent:
+            tab.savedContent ?? (tab.isDirty ? null : tab.content),
+        };
         set((state) => {
           const newState: Partial<TabStore> = {
             tabs: [...state.tabs, newTab],
@@ -173,13 +191,43 @@ export const useTabStore = create<TabStore>()(
       saveTabContent: (id, content) => {
         const tab = get().tabs.find((t) => t.id === id);
         if (tab && tab.type === "markdown") {
-          const isDirty = tab.filePath ? content !== tab.content : true;
+          const savedContent =
+            tab.savedContent === undefined
+              ? tab.isDirty
+                ? null
+                : tab.content
+              : tab.savedContent;
+          const isDirty =
+            savedContent === null || content !== savedContent;
           set((state) => ({
             tabs: state.tabs.map((t) =>
-              t.id === id ? { ...t, content, isDirty } : t
+              t.id === id
+                ? {
+                    ...t,
+                    content,
+                    savedContent,
+                    isDirty,
+                    revision: (t.revision ?? 0) + 1,
+                  }
+                : t
             ),
           }));
         }
+      },
+
+      markTabSaved: (id, savedContent, updates = {}) => {
+        set((state) => ({
+          tabs: state.tabs.map((tab) =>
+            tab.id === id
+              ? {
+                  ...tab,
+                  ...updates,
+                  savedContent,
+                  isDirty: tab.content !== savedContent,
+                }
+              : tab,
+          ),
+        }));
       },
 
       // ── Split layout actions ─────────────────────────────────────────────

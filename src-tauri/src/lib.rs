@@ -1,5 +1,9 @@
+use atomicwrites::{AllowOverwrite, AtomicFile};
+use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// Opens a file-picker dialog and returns the selected .md/.markdown paths.
@@ -80,9 +84,57 @@ async fn read_file(path: String) -> Result<String, String> {
     }
 }
 
-/// Writes (overwrites) a file with the given content string.
+fn modified_timestamp(path: &Path) -> Result<u64, String> {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .map_err(|error| error.to_string())?
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .map_err(|error| error.to_string())
+}
+
+fn file_fingerprint(path: &Path) -> Result<String, String> {
+    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    let digest = Sha256::digest(bytes);
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
+    AtomicFile::new(path, AllowOverwrite)
+        .write(|file| file.write_all(data))
+        .map_err(|error| error.to_string())
+}
+
+fn write_text_file(
+    path: &Path,
+    content: &str,
+    expected_fingerprint: Option<&str>,
+    force: bool,
+) -> Result<serde_json::Value, String> {
+    if !force && let Some(expected) = expected_fingerprint {
+        let current = file_fingerprint(path)?;
+        if current != expected {
+            return Err("FILE_MODIFIED: The file changed on disk".to_string());
+        }
+    }
+
+    atomic_write(path, content.as_bytes())?;
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({
+        "modified": modified_timestamp(path)?,
+        "fingerprint": file_fingerprint(path)?,
+        "size": metadata.len(),
+    }))
+}
+
+/// Atomically writes a text file and rejects stale overwrites by default.
 #[tauri::command]
-async fn write_file(path: String, content: String) -> Result<(), String> {
+async fn write_file(
+    path: String,
+    content: String,
+    expected_fingerprint: Option<String>,
+    force: Option<bool>,
+) -> Result<serde_json::Value, String> {
     #[cfg(debug_assertions)]
     eprintln!(
         "[RUST] write_file called, path: {}, content length: {}",
@@ -90,18 +142,12 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
         content.len()
     );
 
-    match fs::write(&path, content) {
-        Ok(_) => {
-            #[cfg(debug_assertions)]
-            eprintln!("[RUST] write_file success");
-            Ok(())
-        }
-        Err(e) => {
-            #[cfg(debug_assertions)]
-            eprintln!("[RUST] write_file error: {}", e);
-            Err(e.to_string())
-        }
-    }
+    write_text_file(
+        Path::new(&path),
+        &content,
+        expected_fingerprint.as_deref(),
+        force.unwrap_or(false),
+    )
 }
 
 /// Returns basic metadata (name, last-modified epoch-seconds) for a file.
@@ -114,13 +160,15 @@ async fn get_file_info(path: String) -> Result<serde_json::Value, String> {
     let modified = metadata
         .modified()
         .unwrap_or_else(|_| std::time::SystemTime::now())
-        .duration_since(std::time::UNIX_EPOCH)
+        .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs();
+        .as_nanos() as u64;
 
     let result = serde_json::json!({
         "name": PathBuf::from(&path).file_name().unwrap_or_default().to_string_lossy(),
         "modified": modified,
+        "fingerprint": file_fingerprint(Path::new(&path))?,
+        "size": metadata.len(),
     });
     #[cfg(debug_assertions)]
     eprintln!("[RUST] get_file_info returning {:?}", result);
@@ -166,7 +214,7 @@ async fn write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
         data.len()
     );
 
-    match fs::write(&path, data) {
+    match atomic_write(Path::new(&path), &data) {
         Ok(_) => {
             #[cfg(debug_assertions)]
             eprintln!("[RUST] write_binary_file success");
@@ -326,7 +374,8 @@ fn validate_child_name(name: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_child_name;
+    use super::{file_fingerprint, validate_child_name, write_text_file};
+    use std::fs;
 
     #[test]
     fn accepts_single_safe_component() {
@@ -340,6 +389,24 @@ mod tests {
         assert!(validate_child_name("folder/notes.md").is_err());
         assert!(validate_child_name("/tmp/notes.md").is_err());
         assert!(validate_child_name(".").is_err());
+    }
+
+    #[test]
+    fn rejects_stale_writes_without_losing_existing_content() {
+        let path = std::env::temp_dir().join(format!(
+            "ink-atomic-write-{}-{}.md",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        fs::write(&path, "original").unwrap();
+        let fingerprint = file_fingerprint(&path).unwrap();
+
+        write_text_file(&path, "external change", Some(&fingerprint), false).unwrap();
+        let result = write_text_file(&path, "stale editor", Some(&fingerprint), false);
+
+        assert!(result.unwrap_err().starts_with("FILE_MODIFIED:"));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "external change");
+        fs::remove_file(path).unwrap();
     }
 }
 

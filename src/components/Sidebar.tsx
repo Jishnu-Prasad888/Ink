@@ -12,9 +12,16 @@ interface FileNode {
   children?: FileNode[];
 }
 
-export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onError: (message: string) => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
+  onError,
 }) => {
   const [rootFolder, setRootFolder] = useState<string | null>(null);
   const [tree, setTree] = useState<FileNode[]>([]);
@@ -43,13 +50,16 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       localStorage.setItem("sidebar-root-folder", folderPath);
     } catch (err) {
       console.error("Failed to load folder:", err);
+      onError(`Could not load folder: ${String(err)}`);
     }
   };
 
   const handleOpenFolder = async () => {
-    const selected: string[] = await invoke("open_folder_dialog");
-    if (selected && selected.length > 0) {
-      await loadTree(selected[0]);
+    try {
+      const selected: string[] = await invoke("open_folder_dialog");
+      if (selected.length > 0) await loadTree(selected[0]);
+    } catch (error) {
+      onError(`Could not open folder: ${String(error)}`);
     }
   };
 
@@ -71,7 +81,7 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       useTabStore.getState().setActiveTab(existingTab.id);
       return;
     }
-    if (node.name.endsWith(".pdf")) {
+    if (node.name.toLowerCase().endsWith(".pdf")) {
       addTab({
         type: "pdf",
         filePath: node.path,
@@ -81,35 +91,57 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
         isDirty: false,
       });
     } else {
-      // markdown file
-      const content: string = await invoke("read_file", { path: node.path });
-      addTab({
-        type: "markdown",
-        filePath: node.path,
-        fileName: node.name,
-        content,
-        mode: "edit",
-        isDirty: false,
-      });
+      try {
+        const [content, info] = await Promise.all([
+          invoke<string>("read_file", { path: node.path }),
+          invoke<{ modified: number; fingerprint: string }>("get_file_info", {
+            path: node.path,
+          }),
+        ]);
+        addTab({
+          type: "markdown",
+          filePath: node.path,
+          fileName: node.name,
+          content,
+          mode: "edit",
+          isDirty: false,
+          diskModifiedAt: info.modified,
+          diskFingerprint: info.fingerprint,
+        });
+      } catch (error) {
+        onError(`Could not open ${node.name}: ${String(error)}`);
+      }
     }
   };
 
   const handleCreateFile = async (parentPath: string, name: string) => {
     if (!name.trim()) return;
-    await invoke("create_file", { parentPath, name });
-    await loadTree(rootFolder!);
+    try {
+      await invoke("create_file", { parentPath, name });
+      if (rootFolder) await loadTree(rootFolder);
+    } catch (error) {
+      onError(`Could not create file: ${String(error)}`);
+    }
   };
 
   const handleCreateFolder = async (parentPath: string, name: string) => {
     if (!name.trim()) return;
-    await invoke("create_dir", { parentPath, name });
-    await loadTree(rootFolder!);
+    try {
+      await invoke("create_dir", { parentPath, name });
+      if (rootFolder) await loadTree(rootFolder);
+    } catch (error) {
+      onError(`Could not create folder: ${String(error)}`);
+    }
   };
 
   const handleDelete = async (path: string) => {
     if (confirm("Delete this item permanently?")) {
-      await invoke("delete_item", { path });
-      await loadTree(rootFolder!);
+      try {
+        await invoke("delete_item", { path });
+        if (rootFolder) await loadTree(rootFolder);
+      } catch (error) {
+        onError(`Could not delete item: ${String(error)}`);
+      }
     }
   };
 
@@ -130,7 +162,7 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
               </span>
             ) : (
               <span className="sidebar-icon">
-                {node.name.endsWith(".pdf") ? "📄" : "📝"}
+                {node.name.toLowerCase().endsWith(".pdf") ? "📄" : "📝"}
               </span>
             )}
             <span className="sidebar-name">{node.name}</span>
@@ -183,8 +215,10 @@ export const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       const newTree = await buildTree(rootFolder);
       setTree(newTree);
     };
-    loadChildren();
-  }, [rootFolder, expanded]);
+    loadChildren().catch((error) => {
+      onError(`Could not refresh folder: ${String(error)}`);
+    });
+  }, [rootFolder, expanded, onError]);
 
   const buildTree = async (folderPath: string): Promise<FileNode[]> => {
     const entries: any[] = await invoke("read_dir", { path: folderPath });

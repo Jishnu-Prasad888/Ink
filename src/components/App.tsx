@@ -97,7 +97,7 @@ const Icon = {
 };
 
 function App() {
-  const { tabs, activeTabId, addTab, updateTab } = useTabStore();
+  const { tabs, activeTabId, addTab, updateTab, closeTab } = useTabStore();
   const [isDragging, setIsDragging] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -530,7 +530,7 @@ function App() {
         </div>
       )}
 
-      <TabBar />
+      <TabBar onRequestClose={(id) => closeTab(id)} />
       {/* 🧱 1. Wrap preview in ref */}
       <div className="content-area">
         {activeTab ? (

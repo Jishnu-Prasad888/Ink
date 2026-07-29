@@ -2,9 +2,12 @@ import React from "react";
 import { useTabStore } from "../store/tabStore";
 import { Tab } from "./Tab";
 
-export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, reorderTabs, closeTab, setActiveTab } =
-    useTabStore();
+interface TabBarProps {
+  onRequestClose: (id: string) => void;
+}
+
+export const TabBar: React.FC<TabBarProps> = ({ onRequestClose }) => {
+  const { tabs, activeTabId, reorderTabs, setActiveTab } = useTabStore();
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData("text/plain", index.toString());
@@ -52,7 +55,7 @@ export const TabBar: React.FC = () => {
             tab={tab}
             isActive={activeTabId === tab.id}
             onSelect={() => setActiveTab(tab.id)}
-            onClose={() => closeTab(tab.id)}
+            onClose={() => onRequestClose(tab.id)}
           />
         </div>
       ))}

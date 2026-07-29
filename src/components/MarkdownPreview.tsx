@@ -19,6 +19,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   const previewRef = useRef<HTMLDivElement>(null);
   const updateTab = useTabStore((state) => state.updateTab);
+  const saveTabContent = useTabStore((state) => state.saveTabContent);
 
   const didRestoreScroll = useRef(false);
   const initialScrollPos = useRef(tab.previewScrollPosition ?? 0);
@@ -48,22 +49,25 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     const taskItems = previewRef.current.querySelectorAll(
       ".task-list-item input",
     );
-    taskItems.forEach((checkbox: any) => {
+    taskItems.forEach((checkbox, taskIndex) => {
       checkbox.addEventListener("change", () => {
-        const lineIndex = findLineIndexForTask(checkbox);
+        const lines = (tab.content || "").split("\n");
+        const taskLines = lines
+          .map((line, index) => ({ line, index }))
+          .filter(({ line }) => /^\s*[-+*]\s+\[[ xX]\]/.test(line));
+        const lineIndex = taskLines[taskIndex]?.index ?? -1;
         if (lineIndex !== -1) {
-          const lines = (tab.content || "").split("\n");
           const currentLine = lines[lineIndex];
           const newLine = currentLine.replace(
-            /- \[[ x]\]/,
-            `- [${checkbox.checked ? "x" : " "}]`,
+            /\[[ xX]\]/,
+            `[${(checkbox as HTMLInputElement).checked ? "x" : " "}]`,
           );
           lines[lineIndex] = newLine;
-          updateTab(tab.id, { content: lines.join("\n") });
+          saveTabContent(tab.id, lines.join("\n"));
         }
       });
     });
-  }, [html, tab.id]);
+  }, [html, saveTabContent, tab.content, tab.id]);
 
   useEffect(() => {
     return () => {
@@ -74,20 +78,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       }
     };
   }, [tab.id]);
-
-  const findLineIndexForTask = (checkbox: any): number => {
-    const items = previewRef.current?.querySelectorAll(".task-list-item");
-    if (items) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].contains(checkbox)) {
-          const text = items[i].textContent || "";
-          const lines = (tab.content || "").split("\n");
-          return lines.findIndex((line) => line.includes(text.trim()));
-        }
-      }
-    }
-    return -1;
-  };
 
   useEffect(() => {
     if (!previewRef.current || !searchQuery.trim()) return;

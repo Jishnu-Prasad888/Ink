@@ -1,9 +1,9 @@
 // components/PdfViewer.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { invoke } from "@tauri-apps/api/core";
-import { Tab, useTabStore } from "../store/tabStore";
+import { Tab } from "../store/tabStore";
 
 // ✅ FIX 1: Import required CSS — without these, pages 2+ lose canvas rendering
 // and fall back to raw text layer only
@@ -22,9 +22,23 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
   const [pageNumber, setPageNumber] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const updateTab = useTabStore((state) => state.updateTab);
+  const [pageWidth, setPageWidth] = useState(720);
+  const documentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const container = documentRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setPageWidth(Math.max(280, Math.min(entry.contentRect.width - 40, 960)));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let createdUrl: string | null = null;
+    let cancelled = false;
+
     const loadPdf = async () => {
       if (!tab.filePath) {
         setError("No file path provided");
@@ -35,6 +49,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
       try {
         setLoading(true);
         setError(null);
+        setBlobUrl(null);
+        setNumPages(null);
+        setPageNumber(1);
 
         const bytes: Uint8Array | number[] = await invoke("read_file_binary", {
           path: tab.filePath,
@@ -51,8 +68,12 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
         });
 
         const url = URL.createObjectURL(blob);
+        createdUrl = url;
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
         setBlobUrl(url);
-        updateTab(tab.id, { pdfBlobUrl: url });
         setLoading(false);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -64,11 +85,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
     loadPdf();
 
     return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
-  }, [tab.filePath, tab.id]);
+  }, [tab.filePath]);
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
@@ -119,7 +139,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
           Next →
         </button>
       </div>
-      <div className="pdf-document">
+      <div ref={documentRef} className="pdf-document">
         <Document
           file={blobUrl}
           onLoadSuccess={onDocumentLoadSuccess}
@@ -133,7 +153,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
           <Page
             key={pageNumber}
             pageNumber={pageNumber}
-            width={window.innerWidth * 0.6}
+            width={pageWidth}
             renderTextLayer={true}
             renderAnnotationLayer={true}
           />

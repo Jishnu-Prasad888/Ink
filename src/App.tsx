@@ -10,6 +10,22 @@ import { useTabStore } from "./store/tabStore";
 import { useSingleInstance } from "./hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
+interface FileInfo {
+  modified: number;
+  fingerprint: string;
+}
+
+interface WriteResult extends FileInfo {
+  size: number;
+}
+
+interface PendingClose {
+  tabIds: string[];
+  closeWindow: boolean;
+}
 
 const log = (msg: string, data?: any) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
@@ -70,12 +86,12 @@ function TabContent({ tabId, onFocus }: { tabId: string | null; onFocus?: () => 
     );
   }
 
-  if (tab.type === "pdf") return <PdfViewer tab={tab} />;
+  if (tab.type === "pdf") return <PdfViewer key={tab.id} tab={tab} />;
 
   switch (tab.mode) {
-    case "view":  return <MarkdownPreview tab={tab} />;
-    case "split": return <SplitView tab={tab} />;
-    default:      return <Editor tab={tab} />;
+    case "view":  return <MarkdownPreview key={tab.id} tab={tab} />;
+    case "split": return <SplitView key={tab.id} tab={tab} />;
+    default:      return <Editor key={tab.id} tab={tab} />;
   }
 }
 
@@ -133,13 +149,16 @@ function App() {
     disableSplitLayout,
     setSplitDirection,
     setActiveSplitPanel,
-    closeTab,
+    markTabSaved,
     reopenLastClosed,
     setActiveTab,
   } = useTabStore();
 
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [toast, setToast] = useState<string | null>(null);
+  const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
+  const allowWindowClose = useRef(false);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   // Keep stable refs to handlers so keyboard shortcuts always see current state
@@ -147,6 +166,7 @@ function App() {
   const handleSaveAsRef   = useRef<() => Promise<void>>(async () => {});
   const handleOpenFileRef = useRef<() => Promise<void>>(async () => {});
   const handleNewFileRef  = useRef<() => void>(() => {});
+  const requestCloseRef = useRef<(tabIds: string[]) => void>(() => {});
 
   useSingleInstance();
 
@@ -158,60 +178,199 @@ function App() {
       fileName: "Untitled",
       content: "# New Document\n\nStart writing...",
       mode: "edit",
-      isDirty: false,
+      isDirty: true,
       type: "markdown",
     });
   }, [addTab]);
 
-  const handleOpenFile = useCallback(async () => {
-    const paths: string[] = await invoke("open_file_dialog");
-    for (const filePath of paths) {
-      const existing = useTabStore.getState().tabs.find((t) => t.filePath === filePath);
-      if (existing) { useTabStore.getState().setActiveTab(existing.id); continue; }
-      const content: string = await invoke("read_file", { path: filePath });
-      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
-      addTab({ filePath, fileName, content, mode: "edit", isDirty: false, type: "markdown" });
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const openPath = useCallback(async (filePath: string) => {
+    const existing = useTabStore.getState().tabs.find(
+      (tab) => tab.filePath === filePath,
+    );
+    if (existing) {
+      useTabStore.getState().setActiveTab(existing.id);
+      return;
     }
+
+    const [content, info] = await Promise.all([
+      invoke<string>("read_file", { path: filePath }),
+      invoke<FileInfo>("get_file_info", { path: filePath }),
+    ]);
+    const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+    addTab({
+      filePath,
+      fileName,
+      content,
+      mode: "edit",
+      isDirty: false,
+      type: "markdown",
+      diskModifiedAt: info.modified,
+      diskFingerprint: info.fingerprint,
+    });
   }, [addTab]);
+
+  const handleOpenFile = useCallback(async () => {
+    try {
+      const paths: string[] = await invoke("open_file_dialog");
+      for (const filePath of paths) await openPath(filePath);
+    } catch (error) {
+      showToast(`Could not open file: ${String(error)}`);
+    }
+  }, [openPath, showToast]);
+
+  const saveTab = useCallback(async (tabId: string, saveAs = false) => {
+    const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
+    if (!tab || tab.type !== "markdown" || tab.content === null) return false;
+
+    let savePath = tab.filePath;
+    if (saveAs || !savePath) {
+      savePath = await invoke<string | null>("save_file_dialog");
+      if (!savePath) return false;
+      const lowerPath = savePath.toLowerCase();
+      if (!lowerPath.endsWith(".md") && !lowerPath.endsWith(".markdown")) {
+        savePath += ".md";
+      }
+    }
+
+    const contentToWrite = tab.content;
+    let expectedFingerprint =
+      savePath === tab.filePath ? tab.diskFingerprint : undefined;
+    let forceInitialWrite = false;
+
+    if (savePath === tab.filePath && !expectedFingerprint) {
+      try {
+        const [diskContent, info] = await Promise.all([
+          invoke<string>("read_file", { path: savePath }),
+          invoke<FileInfo>("get_file_info", { path: savePath }),
+        ]);
+        const savedBaseline = tab.savedContent ?? tab.content;
+        if (diskContent !== savedBaseline) {
+          forceInitialWrite = await confirm(
+            `${tab.fileName} changed since the previous session. Overwrite the external changes?`,
+            { title: "File changed", kind: "warning" },
+          );
+          if (!forceInitialWrite) return false;
+        }
+        expectedFingerprint = info.fingerprint;
+      } catch (error) {
+        showToast(`Could not verify ${tab.fileName}: ${String(error)}`);
+        return false;
+      }
+    }
+
+    const write = (force: boolean) => invoke<WriteResult>("write_file", {
+      path: savePath,
+      content: contentToWrite,
+      expectedFingerprint,
+      force,
+    });
+
+    try {
+      let result: WriteResult;
+      try {
+        result = await write(forceInitialWrite);
+      } catch (error) {
+        if (!String(error).includes("FILE_MODIFIED:")) throw error;
+        const overwrite = await confirm(
+          `${tab.fileName} changed on disk. Overwrite the external changes?`,
+          { title: "File changed", kind: "warning" },
+        );
+        if (!overwrite) return false;
+        result = await write(true);
+      }
+
+      const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
+      markTabSaved(tab.id, contentToWrite, {
+        filePath: savePath,
+        fileName,
+        diskModifiedAt: result.modified,
+        diskFingerprint: result.fingerprint,
+      });
+      showToast(`Saved ${fileName}`);
+      return true;
+    } catch (error) {
+      showToast(`Could not save ${tab.fileName}: ${String(error)}`);
+      return false;
+    }
+  }, [markTabSaved, showToast]);
 
   const handleSaveFile = useCallback(async () => {
     const freshTab = useTabStore.getState().tabs.find(
       (t) => t.id === useTabStore.getState().activeTabId
     );
-    if (!freshTab) return;
-    if (freshTab.filePath) {
-      await invoke("write_file", { path: freshTab.filePath, content: freshTab.content });
-      updateTab(freshTab.id, { isDirty: false });
-    } else {
-      let savePath: string | null = await invoke("save_file_dialog");
-      if (savePath) {
-        if (!savePath.endsWith(".md") && !savePath.endsWith(".markdown")) savePath += ".md";
-        await invoke("write_file", { path: savePath, content: freshTab.content });
-        const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
-        updateTab(freshTab.id, { filePath: savePath, fileName, isDirty: false });
-      }
-    }
-  }, [updateTab]);
+    if (freshTab) await saveTab(freshTab.id);
+  }, [saveTab]);
 
   const handleSaveAs = useCallback(async () => {
     const freshTab = useTabStore.getState().tabs.find(
       (t) => t.id === useTabStore.getState().activeTabId
     );
-    if (!freshTab) return;
-    let savePath: string | null = await invoke("save_file_dialog");
-    if (savePath) {
-      if (!savePath.endsWith(".md") && !savePath.endsWith(".markdown")) savePath += ".md";
-      await invoke("write_file", { path: savePath, content: freshTab.content });
-      const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
-      updateTab(freshTab.id, { filePath: savePath, fileName, isDirty: false });
+    if (freshTab) await saveTab(freshTab.id, true);
+  }, [saveTab]);
+
+  const requestClose = useCallback((tabIds: string[], closeWindow = false) => {
+    const dirtyTabs = useTabStore.getState().tabs.filter(
+      (tab) => tabIds.includes(tab.id) && tab.type === "markdown" && tab.isDirty,
+    );
+    if (dirtyTabs.length > 0) {
+      setPendingClose({ tabIds, closeWindow });
+      return;
     }
-  }, [updateTab]);
+
+    tabIds.forEach((id) => useTabStore.getState().closeTab(id));
+    if (closeWindow) {
+      allowWindowClose.current = true;
+      void getCurrentWindow().close();
+    }
+  }, []);
+
+  const resolvePendingClose = useCallback(async (action: "save" | "discard" | "cancel") => {
+    const request = pendingClose;
+    if (!request || action === "cancel") {
+      setPendingClose(null);
+      return;
+    }
+
+    if (action === "save") {
+      for (const id of request.tabIds) {
+        const tab = useTabStore.getState().tabs.find((item) => item.id === id);
+        if (tab?.isDirty && !(await saveTab(id))) return;
+      }
+    }
+
+    request.tabIds.forEach((id) => useTabStore.getState().closeTab(id));
+    setPendingClose(null);
+    if (request.closeWindow) {
+      allowWindowClose.current = true;
+      await getCurrentWindow().close();
+    }
+  }, [pendingClose, saveTab]);
 
   // Keep refs in sync
   useEffect(() => { handleSaveFileRef.current = handleSaveFile; }, [handleSaveFile]);
   useEffect(() => { handleSaveAsRef.current   = handleSaveAs;   }, [handleSaveAs]);
   useEffect(() => { handleOpenFileRef.current = handleOpenFile; }, [handleOpenFile]);
   useEffect(() => { handleNewFileRef.current  = handleNewFile;  }, [handleNewFile]);
+  useEffect(() => {
+    requestCloseRef.current = (tabIds) => requestClose(tabIds);
+  }, [requestClose]);
+
+  useEffect(() => {
+    const unlisten = getCurrentWindow().onCloseRequested((event) => {
+      if (allowWindowClose.current) return;
+      const openTabs = useTabStore.getState().tabs;
+      if (openTabs.some((tab) => tab.type === "markdown" && tab.isDirty)) {
+        event.preventDefault();
+        requestClose(openTabs.map((tab) => tab.id), true);
+      }
+    });
+    return () => { void unlisten.then((stop) => stop()); };
+  }, [requestClose]);
 
   // ── Keyboard shortcuts (single listener, stable) ──────────────────────────
   useEffect(() => {
@@ -233,7 +392,7 @@ function App() {
       if (ctrl && e.key === "w") {
         e.preventDefault();
         const { activeTabId: aid } = useTabStore.getState();
-        if (aid) closeTab(aid);
+        if (aid) requestCloseRef.current([aid]);
         return;
       }
       // Ctrl+Tab — cycle tabs
@@ -263,7 +422,7 @@ function App() {
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, []); // stable — uses refs + getState()
+  }, [reopenLastClosed, setActiveTab]);
 
   // ── Drag & drop ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -292,19 +451,26 @@ function App() {
 
   // ── Tauri open-files event ───────────────────────────────────────────────
   useEffect(() => {
-    const unlisten = listen("open-files", (event: any) => {
-      const files: string[] = event.payload;
-      log("open-files event", files);
-      files.forEach(async (filePath) => {
+    const openFiles = async (files: string[]) => {
+      for (const filePath of files) {
         try {
-          const content: string = await invoke("read_file", { path: filePath });
-          const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
-          addTab({ filePath, fileName, content, mode: "edit", isDirty: false, type: "markdown" });
-        } catch (err) { console.error("Failed to open file:", err); }
-      });
+          await openPath(filePath);
+        } catch (error) {
+          showToast(`Could not open ${filePath}: ${String(error)}`);
+        }
+      }
+    };
+
+    void invoke<string[]>("get_opened_files").then(openFiles).catch((error) => {
+      console.error("Failed to read launch files", error);
+    });
+
+    const unlisten = listen<string[]>("open-files", (event) => {
+      log("open-files event", event.payload);
+      void openFiles(event.payload);
     });
     return () => { unlisten.then((fn) => fn()); };
-  }, [addTab]);
+  }, [openPath, showToast]);
 
   // ── Mode change ──────────────────────────────────────────────────────────
   const handleModeChange = (mode: "view" | "edit" | "split") => {
@@ -325,11 +491,11 @@ function App() {
         </div>
       );
     }
-    if (activeTab.type === "pdf") return <PdfViewer tab={activeTab} />;
+    if (activeTab.type === "pdf") return <PdfViewer key={activeTab.id} tab={activeTab} />;
     switch (activeTab.mode) {
-      case "view":  return <MarkdownPreview tab={activeTab} />;
-      case "split": return <SplitView tab={activeTab} />;
-      default:      return <Editor tab={activeTab} />;
+      case "view":  return <MarkdownPreview key={activeTab.id} tab={activeTab} />;
+      case "split": return <SplitView key={activeTab.id} tab={activeTab} />;
+      default:      return <Editor key={activeTab.id} tab={activeTab} />;
     }
   };
 
@@ -372,10 +538,20 @@ function App() {
             <Icon.Open /> Open
           </button>
           <div className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={handleSaveFile} title="Save (Ctrl+S)">
+          <button
+            className="toolbar-btn"
+            onClick={handleSaveFile}
+            title="Save (Ctrl+S)"
+            disabled={!activeTab || activeTab.type !== "markdown"}
+          >
             <Icon.Save /> Save
           </button>
-          <button className="toolbar-btn" onClick={handleSaveAs} title="Save As (Ctrl+Shift+S)">
+          <button
+            className="toolbar-btn"
+            onClick={handleSaveAs}
+            title="Save As (Ctrl+Shift+S)"
+            disabled={!activeTab || activeTab.type !== "markdown"}
+          >
             Save as
           </button>
           <div className="toolbar-divider" />
@@ -425,7 +601,7 @@ function App() {
           )}
         </div>
 
-        {activeTab && !splitLayout.enabled && (
+        {activeTab?.type === "markdown" && !splitLayout.enabled && (
           <div className="mode-switcher">
             <button className={`mode-btn${activeTab.mode === "edit"  ? " active" : ""}`} onClick={() => handleModeChange("edit")}>Edit</button>
             <button className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`} onClick={() => handleModeChange("split")}>Split</button>
@@ -436,9 +612,15 @@ function App() {
 
       {/* ── Main layout ── */}
       <div className="main-layout">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onError={showToast}
+        />
         <div className="content-wrapper">
-          {!splitLayout.enabled && <TabBar />}
+          {!splitLayout.enabled && (
+            <TabBar onRequestClose={(id) => requestClose([id])} />
+          )}
           <div className="content-area">{renderContent()}</div>
         </div>
       </div>
@@ -446,6 +628,45 @@ function App() {
       {isDragging && (
         <div className="drag-overlay">
           <div className="drag-overlay-inner">Drop .md files to open</div>
+        </div>
+      )}
+
+      {toast && <div className="app-toast" role="status">{toast}</div>}
+
+      {pendingClose && (
+        <div className="dialog-backdrop" role="presentation">
+          <div
+            className="save-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="save-dialog-title"
+            aria-describedby="save-dialog-description"
+          >
+            <h2 id="save-dialog-title">Save your changes?</h2>
+            <p id="save-dialog-description">
+              {pendingClose.tabIds
+                .map((id) => tabs.find((tab) => tab.id === id))
+                .filter((tab) => tab?.isDirty)
+                .map((tab) => tab!.fileName)
+                .join(", ")}
+            </p>
+            <div className="save-dialog-actions">
+              <button onClick={() => void resolvePendingClose("cancel")}>Cancel</button>
+              <button
+                className="danger"
+                onClick={() => void resolvePendingClose("discard")}
+              >
+                Don't Save
+              </button>
+              <button
+                className="primary"
+                autoFocus
+                onClick={() => void resolvePendingClose("save")}
+              >
+                Save
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
