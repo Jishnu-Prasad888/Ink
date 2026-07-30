@@ -431,13 +431,11 @@ function App() {
   useEffect(() => {
     const unlisten = getCurrentWindow().onCloseRequested((event) => {
       const openTabs = useTabStore.getState().tabs;
-      if (openTabs.some((tab) => tab.type === "markdown" && tab.isDirty)) {
-        event.preventDefault();
-        requestClose(
-          openTabs.map((tab) => tab.id),
-          true,
-        );
-      }
+      event.preventDefault();
+      requestClose(
+        openTabs.map((tab) => tab.id),
+        true,
+      );
     });
     return () => {
       void unlisten.then((stop) => stop());
