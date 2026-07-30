@@ -6,6 +6,7 @@ import { SplitView } from "./components/SplitView";
 import { Sidebar } from "./components/Sidebar";
 import { PdfViewer } from "./components/PdfViewer";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
+import { Tab } from "./components/Tab";
 import { useTabStore } from "./store/tabStore";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -119,38 +120,61 @@ function SplitFilePanel({
   panelIndex,
   isActive,
   onFocus,
+  onRequestClose,
 }: {
   panelIndex: 0 | 1;
   isActive: boolean;
   onFocus: () => void;
+  onRequestClose: (id: string) => void;
 }) {
   const { tabs, splitLayout, setPanelTab } = useTabStore();
   const panelTabId = splitLayout.panels[panelIndex].tabId;
+  const contentId = `split-panel-${panelIndex}-content`;
+
+  const navigateTabs = (direction: "previous" | "next" | "first" | "last", index: number) => {
+    const targetIndex =
+      direction === "first"
+        ? 0
+        : direction === "last"
+          ? tabs.length - 1
+          : direction === "previous"
+            ? (index - 1 + tabs.length) % tabs.length
+            : (index + 1) % tabs.length;
+    const target = tabs[targetIndex];
+    setPanelTab(panelIndex, target.id);
+    onFocus();
+    requestAnimationFrame(() => {
+      document.getElementById(`split-panel-${panelIndex}-tab-${target.id}`)?.focus();
+    });
+  };
 
   return (
     <div
       className={`split-file-panel ${isActive ? "split-file-panel--active" : ""}`}
       onClick={onFocus}
     >
-      {/* Mini tab-bar for this panel */}
-      <div className="split-file-panel-tabbar">
-        {tabs.map((tab) => (
-          <button
+      <div
+        className="tab-bar split-file-panel-tabbar"
+        role="tablist"
+        aria-label={`Open documents in panel ${panelIndex + 1}`}
+      >
+        {tabs.map((tab, index) => (
+          <Tab
             key={tab.id}
-            className={`split-file-panel-tab ${panelTabId === tab.id ? "active" : ""}`}
-            onClick={(e) => {
-              e.stopPropagation();
+            tab={tab}
+            isActive={panelTabId === tab.id}
+            onSelect={() => {
               setPanelTab(panelIndex, tab.id);
               onFocus();
             }}
-            title={tab.filePath ?? tab.fileName}
-          >
-            {tab.fileName}
-            {tab.isDirty && <span className="unsaved-dot" />}
-          </button>
+            onClose={() => onRequestClose(tab.id)}
+            onNavigate={(direction) => navigateTabs(direction, index)}
+            elementId={`split-panel-${panelIndex}-tab-${tab.id}`}
+            controlsId={contentId}
+          />
         ))}
       </div>
-      <div className="split-file-panel-content">
+      <div id={contentId} className="split-file-panel-content">
         <TabContent tabId={panelTabId} onFocus={onFocus} />
       </div>
     </div>
@@ -639,11 +663,13 @@ function App() {
           panelIndex={0}
           isActive={splitLayout.activePanelIndex === 0}
           onFocus={() => setActiveSplitPanel(0)}
+          onRequestClose={(id) => requestClose([id])}
         />
         <SplitFilePanel
           panelIndex={1}
           isActive={splitLayout.activePanelIndex === 1}
           onFocus={() => setActiveSplitPanel(1)}
+          onRequestClose={(id) => requestClose([id])}
         />
       </ResizableSplitPane>
     );

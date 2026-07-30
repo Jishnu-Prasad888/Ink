@@ -7,13 +7,23 @@ interface TabProps {
   onSelect: () => void;
   onClose: () => void;
   onNavigate: (direction: "previous" | "next" | "first" | "last") => void;
+  elementId?: string;
+  controlsId?: string;
 }
 
 const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[TabComponent:${msg}]`, data ?? "");
 };
 
-export const Tab: React.FC<TabProps> = ({ tab, isActive, onSelect, onClose, onNavigate }) => {
+export const Tab: React.FC<TabProps> = ({
+  tab,
+  isActive,
+  onSelect,
+  onClose,
+  onNavigate,
+  elementId = `tab-${tab.id}`,
+  controlsId = "editor-content",
+}) => {
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
     log("close clicked", { id: tab.id, fileName: tab.fileName });
@@ -23,10 +33,10 @@ export const Tab: React.FC<TabProps> = ({ tab, isActive, onSelect, onClose, onNa
   return (
     <div
       className={`tab${isActive ? " active" : ""}`}
-      id={`tab-${tab.id}`}
+      id={elementId}
       role="tab"
       aria-selected={isActive}
-      aria-controls="editor-content"
+      aria-controls={controlsId}
       tabIndex={isActive ? 0 : -1}
       onClick={onSelect}
       onKeyDown={(event) => {
