@@ -51,11 +51,7 @@ interface TabStore {
   reorderTabs: (startIndex: number, endIndex: number) => void;
   reopenLastClosed: () => void;
   saveTabContent: (id: string, content: string) => void;
-  markTabSaved: (
-    id: string,
-    savedContent: string,
-    updates?: Partial<Tab>,
-  ) => void;
+  markTabSaved: (id: string, savedContent: string, updates?: Partial<Tab>) => void;
 
   // Split-file view actions
   enableSplitLayout: (direction: "horizontal" | "vertical") => void;
@@ -85,8 +81,7 @@ export const useTabStore = create<TabStore>()(
           ...tab,
           id: crypto.randomUUID(),
           revision: tab.revision ?? 0,
-          savedContent:
-            tab.savedContent ?? (tab.isDirty ? null : tab.content),
+          savedContent: tab.savedContent ?? (tab.isDirty ? null : tab.content),
         };
         set((state) => {
           const newState: Partial<TabStore> = {
@@ -105,9 +100,7 @@ export const useTabStore = create<TabStore>()(
 
       updateTab: (id, updates) => {
         set((state) => ({
-          tabs: state.tabs.map((tab) =>
-            tab.id === id ? { ...tab, ...updates } : tab
-          ),
+          tabs: state.tabs.map((tab) => (tab.id === id ? { ...tab, ...updates } : tab)),
         }));
       },
 
@@ -128,7 +121,7 @@ export const useTabStore = create<TabStore>()(
 
         // Remove this tab from split panels
         const panels = state.splitLayout.panels.map((p) =>
-          p.tabId === id ? { tabId: newTabs[0]?.id ?? null } : p
+          p.tabId === id ? { tabId: newTabs[0]?.id ?? null } : p,
         ) as [SplitPanel, SplitPanel];
 
         set({
@@ -156,9 +149,10 @@ export const useTabStore = create<TabStore>()(
           activeTabId: id,
           splitLayout: {
             ...state.splitLayout,
-            panels: state.splitLayout.panels.map((p) =>
-              p.tabId !== id ? { tabId: id } : p
-            ) as [SplitPanel, SplitPanel],
+            panels: state.splitLayout.panels.map((p) => (p.tabId !== id ? { tabId: id } : p)) as [
+              SplitPanel,
+              SplitPanel,
+            ],
           },
         }));
       },
@@ -192,13 +186,8 @@ export const useTabStore = create<TabStore>()(
         const tab = get().tabs.find((t) => t.id === id);
         if (tab && tab.type === "markdown") {
           const savedContent =
-            tab.savedContent === undefined
-              ? tab.isDirty
-                ? null
-                : tab.content
-              : tab.savedContent;
-          const isDirty =
-            savedContent === null || content !== savedContent;
+            tab.savedContent === undefined ? (tab.isDirty ? null : tab.content) : tab.savedContent;
+          const isDirty = savedContent === null || content !== savedContent;
           set((state) => ({
             tabs: state.tabs.map((t) =>
               t.id === id
@@ -209,7 +198,7 @@ export const useTabStore = create<TabStore>()(
                     isDirty,
                     revision: (t.revision ?? 0) + 1,
                   }
-                : t
+                : t,
             ),
           }));
         }
@@ -266,8 +255,7 @@ export const useTabStore = create<TabStore>()(
       setActiveSplitPanel: (panelIndex) => {
         set((state) => ({
           splitLayout: { ...state.splitLayout, activePanelIndex: panelIndex },
-          activeTabId:
-            state.splitLayout.panels[panelIndex].tabId ?? state.activeTabId,
+          activeTabId: state.splitLayout.panels[panelIndex].tabId ?? state.activeTabId,
         }));
       },
 
@@ -297,6 +285,6 @@ export const useTabStore = create<TabStore>()(
           enabled: false,
         },
       }),
-    }
-  )
+    },
+  ),
 );

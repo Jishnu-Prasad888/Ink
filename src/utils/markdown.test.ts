@@ -22,9 +22,7 @@ describe("renderMarkdown", () => {
   });
 
   it("escapes Mermaid source before inserting it into the preview", async () => {
-    const html = await renderMarkdown(
-      "```mermaid\n</pre><img src=x onerror=alert(1)>\n```",
-    );
+    const html = await renderMarkdown("```mermaid\n</pre><img src=x onerror=alert(1)>\n```");
     const container = document.createElement("div");
     container.innerHTML = html;
 

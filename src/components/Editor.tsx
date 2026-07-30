@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
 import { Tab, useTabStore } from "../store/tabStore";
@@ -9,90 +9,90 @@ interface EditorProps {
   searchQuery?: string;
 }
 
-const log = (msg: string, data?: any) => {
+const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[Editor:${msg}]`, data ?? "");
 };
 
 const customTheme = EditorView.theme({
-    "&": {
-      backgroundColor: "var(--surface)",
-      color: "var(--text-primary)",
-      height: "100%",
-    },
-    "&.cm-focused": { outline: "1px solid var(--accent-border)" },
-    ".cm-scroller": {
-      fontFamily: "var(--font-editor)",
-      fontSize: "13.5px",
-      lineHeight: "1.75",
-      // Must be "auto" (not hidden/clip) so the native scrollbar renders.
-      overflow: "auto",
-    },
-    ".cm-content": {
-      padding: "24px 28px",
-      caretColor: "var(--accent)",
-    },
-    ".cm-gutters": {
-      backgroundColor: "var(--surface-raised)",
-      borderRight: "1px solid var(--border)",
-      color: "var(--text-muted)",
-      minWidth: "48px",
-      paddingRight: "8px",
-    },
-    ".cm-gutter": { backgroundColor: "var(--surface-raised)" },
-    ".cm-lineNumbers .cm-gutterElement": { fontSize: "11.5px" },
-    ".cm-activeLine": { backgroundColor: "var(--bg)" },
-    ".cm-activeLineGutter": {
-      backgroundColor: "var(--surface-hover)",
-      color: "var(--text-secondary)",
-    },
-    ".cm-selectionBackground, ::selection": {
-      backgroundColor: "var(--accent-bg) !important",
-    },
-    ".cm-cursor": {
-      borderLeftColor: "var(--accent)",
-      borderLeftWidth: "2px",
-    },
-    ".cm-matchingBracket": {
-      backgroundColor: "var(--accent-bg)",
-      outline: "1px solid var(--accent-border)",
-    },
-    ".cm-foldPlaceholder": {
+  "&": {
+    backgroundColor: "var(--surface)",
+    color: "var(--text-primary)",
+    height: "100%",
+  },
+  "&.cm-focused": { outline: "1px solid var(--accent-border)" },
+  ".cm-scroller": {
+    fontFamily: "var(--font-editor)",
+    fontSize: "13.5px",
+    lineHeight: "1.75",
+    // Must be "auto" (not hidden/clip) so the native scrollbar renders.
+    overflow: "auto",
+  },
+  ".cm-content": {
+    padding: "24px 28px",
+    caretColor: "var(--accent)",
+  },
+  ".cm-gutters": {
+    backgroundColor: "var(--surface-raised)",
+    borderRight: "1px solid var(--border)",
+    color: "var(--text-muted)",
+    minWidth: "48px",
+    paddingRight: "8px",
+  },
+  ".cm-gutter": { backgroundColor: "var(--surface-raised)" },
+  ".cm-lineNumbers .cm-gutterElement": { fontSize: "11.5px" },
+  ".cm-activeLine": { backgroundColor: "var(--bg)" },
+  ".cm-activeLineGutter": {
+    backgroundColor: "var(--surface-hover)",
+    color: "var(--text-secondary)",
+  },
+  ".cm-selectionBackground, ::selection": {
+    backgroundColor: "var(--accent-bg) !important",
+  },
+  ".cm-cursor": {
+    borderLeftColor: "var(--accent)",
+    borderLeftWidth: "2px",
+  },
+  ".cm-matchingBracket": {
+    backgroundColor: "var(--accent-bg)",
+    outline: "1px solid var(--accent-border)",
+  },
+  ".cm-foldPlaceholder": {
+    background: "var(--accent-bg)",
+    border: "1px solid var(--accent-border)",
+    color: "var(--accent)",
+    borderRadius: "3px",
+    padding: "0 4px",
+  },
+  ".cm-tooltip": {
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: "6px",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  },
+  ".cm-tooltip-autocomplete": {
+    "& > ul > li[aria-selected]": {
       background: "var(--accent-bg)",
-      border: "1px solid var(--accent-border)",
-      color: "var(--accent)",
-      borderRadius: "3px",
-      padding: "0 4px",
+      color: "var(--text-primary)",
     },
-    ".cm-tooltip": {
-      background: "var(--surface)",
-      border: "1px solid var(--border)",
-      borderRadius: "6px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    },
-    ".cm-tooltip-autocomplete": {
-      "& > ul > li[aria-selected]": {
-        background: "var(--accent-bg)",
-        color: "var(--text-primary)",
-      },
-    },
-    // Markdown syntax
-    ".cm-header":   { color: "var(--text-primary)", fontWeight: "500" },
-    ".cm-header-1": { fontSize: "1.12em" },
-    ".cm-header-2": { fontSize: "1.05em" },
-    ".cm-strong":   { color: "var(--text-primary)", fontWeight: "600" },
-    ".cm-em":       { color: "var(--text-secondary)", fontStyle: "italic" },
-    ".cm-link":     { color: "var(--accent)" },
-    ".cm-url":      { color: "var(--accent)" },
-    ".cm-quote":    { color: "var(--text-muted)", fontStyle: "italic" },
-    ".cm-code":     { color: "var(--accent)", background: "var(--accent-bg)", borderRadius: "3px" },
-    ".cm-hr":       { color: "var(--border-strong)" },
-    ".cm-list":     { color: "var(--text-secondary)" },
-  });
+  },
+  // Markdown syntax
+  ".cm-header": { color: "var(--text-primary)", fontWeight: "500" },
+  ".cm-header-1": { fontSize: "1.12em" },
+  ".cm-header-2": { fontSize: "1.05em" },
+  ".cm-strong": { color: "var(--text-primary)", fontWeight: "600" },
+  ".cm-em": { color: "var(--text-secondary)", fontStyle: "italic" },
+  ".cm-link": { color: "var(--accent)" },
+  ".cm-url": { color: "var(--accent)" },
+  ".cm-quote": { color: "var(--text-muted)", fontStyle: "italic" },
+  ".cm-code": { color: "var(--accent)", background: "var(--accent-bg)", borderRadius: "3px" },
+  ".cm-hr": { color: "var(--border-strong)" },
+  ".cm-list": { color: "var(--text-secondary)" },
+});
 
 export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   const saveTabContent = useTabStore((state) => state.saveTabContent);
   const updateTab = useTabStore((state) => state.updateTab);
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   log("mount", { tabId: tab.id, fileName: tab.fileName });
 
@@ -112,13 +112,13 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   // Doing it on every scroll event causes a render → useEffect → scrollTop
   // assignment loop.
   useEffect(() => {
+    const view = editorRef.current?.view;
     return () => {
-      const view = editorRef.current?.view;
       if (view) {
         updateTab(tab.id, { scrollPosition: view.scrollDOM.scrollTop });
       }
     };
-  }, [tab.id]);
+  }, [tab.id, updateTab]);
 
   useEffect(() => {
     if (editorRef.current && tab.cursorPosition !== undefined) {
@@ -138,7 +138,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
       const view = editorRef.current.view;
       if (view) view.scrollDOM.scrollTop = tab.scrollPosition;
     }
-  }, []); // empty deps — run once on mount only
+  }, [tab.scrollPosition]);
 
   // Jump to first line matching searchQuery whenever it changes.
   useEffect(() => {
@@ -156,7 +156,10 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   }, [searchQuery]);
 
   return (
-    <div className="edit-mode" style={{ height: "100%", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div
+      className="edit-mode"
+      style={{ height: "100%", overflow: "hidden", display: "flex", flexDirection: "column" }}
+    >
       <CodeMirror
         ref={editorRef}
         value={tab.content ?? ""}

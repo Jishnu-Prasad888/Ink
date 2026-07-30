@@ -46,9 +46,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       console.error("Failed to render Mermaid diagram", error);
     });
 
-    const taskItems = previewRef.current.querySelectorAll(
-      ".task-list-item input",
-    );
+    const taskItems = previewRef.current.querySelectorAll(".task-list-item input");
     taskItems.forEach((checkbox, taskIndex) => {
       checkbox.addEventListener("change", () => {
         const lines = (tab.content || "").split("\n");
@@ -70,29 +68,24 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   }, [html, saveTabContent, tab.content, tab.id]);
 
   useEffect(() => {
+    const preview = previewRef.current;
     return () => {
-      if (previewRef.current) {
+      if (preview) {
         updateTab(tab.id, {
-          previewScrollPosition: previewRef.current.scrollTop,
+          previewScrollPosition: preview.scrollTop,
         });
       }
     };
-  }, [tab.id]);
+  }, [tab.id, updateTab]);
 
   useEffect(() => {
     if (!previewRef.current || !searchQuery.trim()) return;
 
-    const walker = document.createTreeWalker(
-      previewRef.current,
-      NodeFilter.SHOW_TEXT,
-      null,
-    );
+    const walker = document.createTreeWalker(previewRef.current, NodeFilter.SHOW_TEXT, null);
 
     let node: Text | null;
     while ((node = walker.nextNode() as Text | null)) {
-      const idx =
-        node.textContent?.toLowerCase().indexOf(searchQuery.toLowerCase()) ??
-        -1;
+      const idx = node.textContent?.toLowerCase().indexOf(searchQuery.toLowerCase()) ?? -1;
 
       if (idx !== -1) {
         (node.parentElement as HTMLElement)?.scrollIntoView({
@@ -117,9 +110,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
       if (href.startsWith("#")) {
         event.preventDefault();
-        const target = preview.querySelector<HTMLElement>(
-          `#${CSS.escape(href.slice(1))}`,
-        );
+        const target = preview.querySelector<HTMLElement>(`#${CSS.escape(href.slice(1))}`);
         target?.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }

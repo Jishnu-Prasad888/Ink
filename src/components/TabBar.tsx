@@ -25,10 +25,7 @@ export const TabBar: React.FC<TabBarProps> = ({ onRequestClose }) => {
     if (dragIndex !== dropIndex) reorderTabs(dragIndex, dropIndex);
   };
 
-  const navigateTabs = (
-    direction: "previous" | "next" | "first" | "last",
-    index: number,
-  ) => {
+  const navigateTabs = (direction: "previous" | "next" | "first" | "last", index: number) => {
     const targetIndex =
       direction === "first"
         ? 0

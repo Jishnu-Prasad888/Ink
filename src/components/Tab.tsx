@@ -9,17 +9,11 @@ interface TabProps {
   onNavigate: (direction: "previous" | "next" | "first" | "last") => void;
 }
 
-const log = (msg: string, data?: any) => {
+const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[TabComponent:${msg}]`, data ?? "");
 };
 
-export const Tab: React.FC<TabProps> = ({
-  tab,
-  isActive,
-  onSelect,
-  onClose,
-  onNavigate,
-}) => {
+export const Tab: React.FC<TabProps> = ({ tab, isActive, onSelect, onClose, onNavigate }) => {
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
     log("close clicked", { id: tab.id, fileName: tab.fileName });

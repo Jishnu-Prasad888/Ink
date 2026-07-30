@@ -7,7 +7,6 @@ import { Sidebar } from "./components/Sidebar";
 import { PdfViewer } from "./components/PdfViewer";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import { useTabStore } from "./store/tabStore";
-import { useSingleInstance } from "./hooks/useSingleInstance";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -29,7 +28,7 @@ interface PendingClose {
 
 type Theme = "light" | "dark" | "system";
 
-const log = (msg: string, data?: any) => {
+const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
 };
 
@@ -41,19 +40,33 @@ const Icon = {
   ),
   Open: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M1.5 5h11v7a1 1 0 01-1 1h-9a1 1 0 01-1-1V5zM1.5 5l1.5-3h3l1 1.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path
+        d="M1.5 5h11v7a1 1 0 01-1 1h-9a1 1 0 01-1-1V5zM1.5 5l1.5-3h3l1 1.5h5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
     </svg>
   ),
   Save: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 2h8l2 2v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2z" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M2 2h8l2 2v8a1 1 0 01-1 1H3a1 1 0 01-1-1V2z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
       <rect x="4.5" y="1.5" width="5" height="3" rx=".5" stroke="currentColor" strokeWidth="1.3" />
       <rect x="3.5" y="8" width="7" height="4.5" rx=".5" stroke="currentColor" strokeWidth="1.3" />
     </svg>
   ),
   Menu: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <path
+        d="M2 4h10M2 7h10M2 10h10"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   ),
   SplitH: () => (
@@ -91,9 +104,12 @@ function TabContent({ tabId, onFocus }: { tabId: string | null; onFocus?: () => 
   if (tab.type === "pdf") return <PdfViewer key={tab.id} tab={tab} />;
 
   switch (tab.mode) {
-    case "view":  return <MarkdownPreview key={tab.id} tab={tab} />;
-    case "split": return <SplitView key={tab.id} tab={tab} />;
-    default:      return <Editor key={tab.id} tab={tab} />;
+    case "view":
+      return <MarkdownPreview key={tab.id} tab={tab} />;
+    case "split":
+      return <SplitView key={tab.id} tab={tab} />;
+    default:
+      return <Editor key={tab.id} tab={tab} />;
   }
 }
 
@@ -160,8 +176,8 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
-  const [theme, setTheme] = useState<Theme>(() =>
-    (localStorage.getItem("ink-theme") as Theme | null) ?? "system",
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem("ink-theme") as Theme | null) ?? "system",
   );
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
@@ -171,12 +187,10 @@ function App() {
 
   // Keep stable refs to handlers so keyboard shortcuts always see current state
   const handleSaveFileRef = useRef<() => Promise<void>>(async () => {});
-  const handleSaveAsRef   = useRef<() => Promise<void>>(async () => {});
+  const handleSaveAsRef = useRef<() => Promise<void>>(async () => {});
   const handleOpenFileRef = useRef<() => Promise<void>>(async () => {});
-  const handleNewFileRef  = useRef<() => void>(() => {});
+  const handleNewFileRef = useRef<() => void>(() => {});
   const requestCloseRef = useRef<(tabIds: string[]) => void>(() => {});
-
-  useSingleInstance();
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -201,50 +215,51 @@ function App() {
     window.setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const openPath = useCallback(async (filePath: string) => {
-    const existing = useTabStore.getState().tabs.find(
-      (tab) => tab.filePath === filePath,
-    );
-    if (existing) {
-      useTabStore.getState().setActiveTab(existing.id);
-      return;
-    }
+  const openPath = useCallback(
+    async (filePath: string) => {
+      const existing = useTabStore.getState().tabs.find((tab) => tab.filePath === filePath);
+      if (existing) {
+        useTabStore.getState().setActiveTab(existing.id);
+        return;
+      }
 
-    const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
-    if (filePath.toLowerCase().endsWith(".pdf")) {
+      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+      if (filePath.toLowerCase().endsWith(".pdf")) {
+        addTab({
+          filePath,
+          fileName,
+          content: null,
+          mode: "view",
+          isDirty: false,
+          type: "pdf",
+        });
+        return;
+      }
+
+      const [content, info] = await Promise.all([
+        invoke<string>("read_file", { path: filePath }),
+        invoke<FileInfo>("get_file_info", { path: filePath }),
+      ]);
+      const openedWhileReading = useTabStore
+        .getState()
+        .tabs.find((tab) => tab.filePath === filePath);
+      if (openedWhileReading) {
+        useTabStore.getState().setActiveTab(openedWhileReading.id);
+        return;
+      }
       addTab({
         filePath,
         fileName,
-        content: null,
-        mode: "view",
+        content,
+        mode: "edit",
         isDirty: false,
-        type: "pdf",
+        type: "markdown",
+        diskModifiedAt: info.modified,
+        diskFingerprint: info.fingerprint,
       });
-      return;
-    }
-
-    const [content, info] = await Promise.all([
-      invoke<string>("read_file", { path: filePath }),
-      invoke<FileInfo>("get_file_info", { path: filePath }),
-    ]);
-    const openedWhileReading = useTabStore.getState().tabs.find(
-      (tab) => tab.filePath === filePath,
-    );
-    if (openedWhileReading) {
-      useTabStore.getState().setActiveTab(openedWhileReading.id);
-      return;
-    }
-    addTab({
-      filePath,
-      fileName,
-      content,
-      mode: "edit",
-      isDirty: false,
-      type: "markdown",
-      diskModifiedAt: info.modified,
-      diskFingerprint: info.fingerprint,
-    });
-  }, [addTab]);
+    },
+    [addTab],
+  );
 
   const handleOpenFile = useCallback(async () => {
     try {
@@ -255,100 +270,103 @@ function App() {
     }
   }, [openPath, showToast]);
 
-  const saveTab = useCallback(async (tabId: string, saveAs = false) => {
-    const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
-    if (!tab || tab.type !== "markdown" || tab.content === null) return false;
+  const saveTab = useCallback(
+    async (tabId: string, saveAs = false) => {
+      const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
+      if (!tab || tab.type !== "markdown" || tab.content === null) return false;
 
-    let savePath = tab.filePath;
-    if (saveAs || !savePath) {
-      savePath = await invoke<string | null>("save_file_dialog");
-      if (!savePath) return false;
-      const lowerPath = savePath.toLowerCase();
-      if (!lowerPath.endsWith(".md") && !lowerPath.endsWith(".markdown")) {
-        savePath += ".md";
+      let savePath = tab.filePath;
+      if (saveAs || !savePath) {
+        savePath = await invoke<string | null>("save_file_dialog");
+        if (!savePath) return false;
+        const lowerPath = savePath.toLowerCase();
+        if (!lowerPath.endsWith(".md") && !lowerPath.endsWith(".markdown")) {
+          savePath += ".md";
+        }
       }
-    }
 
-    const contentToWrite = tab.content;
-    let expectedFingerprint =
-      savePath === tab.filePath ? tab.diskFingerprint : undefined;
-    let forceInitialWrite = false;
+      const contentToWrite = tab.content;
+      let expectedFingerprint = savePath === tab.filePath ? tab.diskFingerprint : undefined;
+      let forceInitialWrite = false;
 
-    if (savePath === tab.filePath && !expectedFingerprint) {
+      if (savePath === tab.filePath && !expectedFingerprint) {
+        try {
+          const [diskContent, info] = await Promise.all([
+            invoke<string>("read_file", { path: savePath }),
+            invoke<FileInfo>("get_file_info", { path: savePath }),
+          ]);
+          const savedBaseline = tab.savedContent ?? tab.content;
+          if (diskContent !== savedBaseline) {
+            forceInitialWrite = await confirm(
+              `${tab.fileName} changed since the previous session. Overwrite the external changes?`,
+              { title: "File changed", kind: "warning" },
+            );
+            if (!forceInitialWrite) return false;
+          }
+          expectedFingerprint = info.fingerprint;
+        } catch (error) {
+          showToast(`Could not verify ${tab.fileName}: ${String(error)}`);
+          return false;
+        }
+      }
+
+      const write = (force: boolean) =>
+        invoke<WriteResult>("write_file", {
+          path: savePath,
+          content: contentToWrite,
+          expectedFingerprint,
+          force,
+        });
+
       try {
-        const [diskContent, info] = await Promise.all([
-          invoke<string>("read_file", { path: savePath }),
-          invoke<FileInfo>("get_file_info", { path: savePath }),
-        ]);
-        const savedBaseline = tab.savedContent ?? tab.content;
-        if (diskContent !== savedBaseline) {
-          forceInitialWrite = await confirm(
-            `${tab.fileName} changed since the previous session. Overwrite the external changes?`,
+        let result: WriteResult;
+        try {
+          result = await write(forceInitialWrite);
+        } catch (error) {
+          if (!String(error).includes("FILE_MODIFIED:")) throw error;
+          const overwrite = await confirm(
+            `${tab.fileName} changed on disk. Overwrite the external changes?`,
             { title: "File changed", kind: "warning" },
           );
-          if (!forceInitialWrite) return false;
+          if (!overwrite) return false;
+          result = await write(true);
         }
-        expectedFingerprint = info.fingerprint;
+
+        const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
+        markTabSaved(tab.id, contentToWrite, {
+          filePath: savePath,
+          fileName,
+          diskModifiedAt: result.modified,
+          diskFingerprint: result.fingerprint,
+        });
+        showToast(`Saved ${fileName}`);
+        return true;
       } catch (error) {
-        showToast(`Could not verify ${tab.fileName}: ${String(error)}`);
+        showToast(`Could not save ${tab.fileName}: ${String(error)}`);
         return false;
       }
-    }
-
-    const write = (force: boolean) => invoke<WriteResult>("write_file", {
-      path: savePath,
-      content: contentToWrite,
-      expectedFingerprint,
-      force,
-    });
-
-    try {
-      let result: WriteResult;
-      try {
-        result = await write(forceInitialWrite);
-      } catch (error) {
-        if (!String(error).includes("FILE_MODIFIED:")) throw error;
-        const overwrite = await confirm(
-          `${tab.fileName} changed on disk. Overwrite the external changes?`,
-          { title: "File changed", kind: "warning" },
-        );
-        if (!overwrite) return false;
-        result = await write(true);
-      }
-
-      const fileName = savePath.replace(/\\/g, "/").split("/").pop() ?? savePath;
-      markTabSaved(tab.id, contentToWrite, {
-        filePath: savePath,
-        fileName,
-        diskModifiedAt: result.modified,
-        diskFingerprint: result.fingerprint,
-      });
-      showToast(`Saved ${fileName}`);
-      return true;
-    } catch (error) {
-      showToast(`Could not save ${tab.fileName}: ${String(error)}`);
-      return false;
-    }
-  }, [markTabSaved, showToast]);
+    },
+    [markTabSaved, showToast],
+  );
 
   const handleSaveFile = useCallback(async () => {
-    const freshTab = useTabStore.getState().tabs.find(
-      (t) => t.id === useTabStore.getState().activeTabId
-    );
+    const freshTab = useTabStore
+      .getState()
+      .tabs.find((t) => t.id === useTabStore.getState().activeTabId);
     if (freshTab) await saveTab(freshTab.id);
   }, [saveTab]);
 
   const handleSaveAs = useCallback(async () => {
-    const freshTab = useTabStore.getState().tabs.find(
-      (t) => t.id === useTabStore.getState().activeTabId
-    );
+    const freshTab = useTabStore
+      .getState()
+      .tabs.find((t) => t.id === useTabStore.getState().activeTabId);
     if (freshTab) await saveTab(freshTab.id, true);
   }, [saveTab]);
 
   const requestClose = useCallback((tabIds: string[], closeWindow = false) => {
-    const dirtyTabs = useTabStore.getState().tabs.filter(
-      (tab) => tabIds.includes(tab.id) && tab.type === "markdown" && tab.isDirty,
-    );
+    const dirtyTabs = useTabStore
+      .getState()
+      .tabs.filter((tab) => tabIds.includes(tab.id) && tab.type === "markdown" && tab.isDirty);
     if (dirtyTabs.length > 0) {
       setPendingClose({ tabIds, closeWindow });
       return;
@@ -361,33 +379,44 @@ function App() {
     }
   }, []);
 
-  const resolvePendingClose = useCallback(async (action: "save" | "discard" | "cancel") => {
-    const request = pendingClose;
-    if (!request || action === "cancel") {
-      setPendingClose(null);
-      return;
-    }
-
-    if (action === "save") {
-      for (const id of request.tabIds) {
-        const tab = useTabStore.getState().tabs.find((item) => item.id === id);
-        if (tab?.isDirty && !(await saveTab(id))) return;
+  const resolvePendingClose = useCallback(
+    async (action: "save" | "discard" | "cancel") => {
+      const request = pendingClose;
+      if (!request || action === "cancel") {
+        setPendingClose(null);
+        return;
       }
-    }
 
-    request.tabIds.forEach((id) => useTabStore.getState().closeTab(id));
-    setPendingClose(null);
-    if (request.closeWindow) {
-      allowWindowClose.current = true;
-      await getCurrentWindow().close();
-    }
-  }, [pendingClose, saveTab]);
+      if (action === "save") {
+        for (const id of request.tabIds) {
+          const tab = useTabStore.getState().tabs.find((item) => item.id === id);
+          if (tab?.isDirty && !(await saveTab(id))) return;
+        }
+      }
+
+      request.tabIds.forEach((id) => useTabStore.getState().closeTab(id));
+      setPendingClose(null);
+      if (request.closeWindow) {
+        allowWindowClose.current = true;
+        await getCurrentWindow().close();
+      }
+    },
+    [pendingClose, saveTab],
+  );
 
   // Keep refs in sync
-  useEffect(() => { handleSaveFileRef.current = handleSaveFile; }, [handleSaveFile]);
-  useEffect(() => { handleSaveAsRef.current   = handleSaveAs;   }, [handleSaveAs]);
-  useEffect(() => { handleOpenFileRef.current = handleOpenFile; }, [handleOpenFile]);
-  useEffect(() => { handleNewFileRef.current  = handleNewFile;  }, [handleNewFile]);
+  useEffect(() => {
+    handleSaveFileRef.current = handleSaveFile;
+  }, [handleSaveFile]);
+  useEffect(() => {
+    handleSaveAsRef.current = handleSaveAs;
+  }, [handleSaveAs]);
+  useEffect(() => {
+    handleOpenFileRef.current = handleOpenFile;
+  }, [handleOpenFile]);
+  useEffect(() => {
+    handleNewFileRef.current = handleNewFile;
+  }, [handleNewFile]);
   useEffect(() => {
     requestCloseRef.current = (tabIds) => requestClose(tabIds);
   }, [requestClose]);
@@ -398,10 +427,15 @@ function App() {
       const openTabs = useTabStore.getState().tabs;
       if (openTabs.some((tab) => tab.type === "markdown" && tab.isDirty)) {
         event.preventDefault();
-        requestClose(openTabs.map((tab) => tab.id), true);
+        requestClose(
+          openTabs.map((tab) => tab.id),
+          true,
+        );
       }
     });
-    return () => { void unlisten.then((stop) => stop()); };
+    return () => {
+      void unlisten.then((stop) => stop());
+    };
   }, [requestClose]);
 
   // ── Keyboard shortcuts (single listener, stable) ──────────────────────────
@@ -431,9 +465,17 @@ function App() {
         return;
       }
       // Ctrl+O
-      if (ctrl && key === "o") { e.preventDefault(); await handleOpenFileRef.current(); return; }
+      if (ctrl && key === "o") {
+        e.preventDefault();
+        await handleOpenFileRef.current();
+        return;
+      }
       // Ctrl+N
-      if (ctrl && key === "n") { e.preventDefault(); handleNewFileRef.current(); return; }
+      if (ctrl && key === "n") {
+        e.preventDefault();
+        handleNewFileRef.current();
+        return;
+      }
       // Ctrl+W
       if (ctrl && key === "w") {
         e.preventDefault();
@@ -453,16 +495,29 @@ function App() {
         return;
       }
       // Ctrl+Shift+T — reopen last closed
-      if (ctrl && e.shiftKey && key === "t") { e.preventDefault(); reopenLastClosed(); return; }
+      if (ctrl && e.shiftKey && key === "t") {
+        e.preventDefault();
+        reopenLastClosed();
+        return;
+      }
 
       // Ctrl+1/2/3 — mode switching for active tab
       if (ctrl && !e.shiftKey) {
         const { activeTabId: aid, tabs: t, updateTab: ut } = useTabStore.getState();
         const tab = t.find((x) => x.id === aid);
         if (!tab) return;
-        if (e.key === "1") { e.preventDefault(); ut(tab.id, { mode: "edit"  }); }
-        if (e.key === "2") { e.preventDefault(); ut(tab.id, { mode: "split" }); }
-        if (e.key === "3") { e.preventDefault(); ut(tab.id, { mode: "view"  }); }
+        if (e.key === "1") {
+          e.preventDefault();
+          ut(tab.id, { mode: "edit" });
+        }
+        if (e.key === "2") {
+          e.preventDefault();
+          ut(tab.id, { mode: "split" });
+        }
+        if (e.key === "3") {
+          e.preventDefault();
+          ut(tab.id, { mode: "view" });
+        }
       }
     };
 
@@ -472,20 +527,31 @@ function App() {
 
   // ── Drag & drop ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const onDragOver  = (e: DragEvent) => {
+    const onDragOver = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
       setIsDragging(true);
     };
-    const onDragLeave = (e: DragEvent) => { e.preventDefault(); setIsDragging(false); };
+    const onDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+    };
     const onDrop = async (e: DragEvent) => {
-      e.preventDefault(); setIsDragging(false);
+      e.preventDefault();
+      setIsDragging(false);
       const files = Array.from(e.dataTransfer?.files || []);
       for (const file of files) {
         const lower = file.name.toLowerCase();
         if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
           const content = await file.text();
-          addTab({ filePath: null, fileName: file.name, content, mode: "edit", isDirty: true, type: "markdown" });
+          addTab({
+            filePath: null,
+            fileName: file.name,
+            content,
+            mode: "edit",
+            isDirty: true,
+            type: "markdown",
+          });
         }
       }
     };
@@ -511,15 +577,19 @@ function App() {
       }
     };
 
-    void invoke<string[]>("get_opened_files").then(openFiles).catch((error) => {
-      console.error("Failed to read launch files", error);
-    });
+    void invoke<string[]>("get_opened_files")
+      .then(openFiles)
+      .catch((error) => {
+        console.error("Failed to read launch files", error);
+      });
 
     const unlisten = listen<string[]>("open-files", (event) => {
       log("open-files event", event.payload);
       void openFiles(event.payload);
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, [openPath, showToast]);
 
   // ── Mode change ──────────────────────────────────────────────────────────
@@ -535,17 +605,24 @@ function App() {
           <h2>Markdown Editor</h2>
           <p>Drop .md files here or open one to get started</p>
           <div className="welcome-actions">
-            <button className="welcome-btn primary" onClick={handleNewFile}>New file</button>
-            <button className="welcome-btn" onClick={handleOpenFile}>Open file</button>
+            <button className="welcome-btn primary" onClick={handleNewFile}>
+              New file
+            </button>
+            <button className="welcome-btn" onClick={handleOpenFile}>
+              Open file
+            </button>
           </div>
         </div>
       );
     }
     if (activeTab.type === "pdf") return <PdfViewer key={activeTab.id} tab={activeTab} />;
     switch (activeTab.mode) {
-      case "view":  return <MarkdownPreview key={activeTab.id} tab={activeTab} />;
-      case "split": return <SplitView key={activeTab.id} tab={activeTab} />;
-      default:      return <Editor key={activeTab.id} tab={activeTab} />;
+      case "view":
+        return <MarkdownPreview key={activeTab.id} tab={activeTab} />;
+      case "split":
+        return <SplitView key={activeTab.id} tab={activeTab} />;
+      default:
+        return <Editor key={activeTab.id} tab={activeTab} />;
     }
   };
 
@@ -553,11 +630,7 @@ function App() {
     if (!splitLayout.enabled) return renderSingleContent();
 
     return (
-      <ResizableSplitPane
-        direction={splitLayout.direction}
-        initialSplit={50}
-        minSize={120}
-      >
+      <ResizableSplitPane direction={splitLayout.direction} initialSplit={50} minSize={120}>
         <SplitFilePanel
           panelIndex={0}
           isActive={splitLayout.activePanelIndex === 0}
@@ -600,14 +673,12 @@ function App() {
     setCommandIndex(0);
   };
 
-  const activeContent = activeTab?.type === "markdown" ? activeTab.content ?? "" : "";
+  const activeContent = activeTab?.type === "markdown" ? (activeTab.content ?? "") : "";
   const cursorPosition = Math.min(activeTab?.cursorPosition ?? 0, activeContent.length);
   const beforeCursor = activeContent.slice(0, cursorPosition);
   const line = beforeCursor.split("\n").length;
   const column = cursorPosition - beforeCursor.lastIndexOf("\n");
-  const wordCount = activeContent.trim()
-    ? activeContent.trim().split(/\s+/).length
-    : 0;
+  const wordCount = activeContent.trim() ? activeContent.trim().split(/\s+/).length : 0;
 
   return (
     <div className="app-container">
@@ -715,30 +786,44 @@ function App() {
             }
             title="Cycle color theme"
           >
-            {theme === "system" ? "System theme" : `${theme[0].toUpperCase()}${theme.slice(1)} theme`}
+            {theme === "system"
+              ? "System theme"
+              : `${theme[0].toUpperCase()}${theme.slice(1)} theme`}
           </button>
         </div>
 
         {activeTab?.type === "markdown" && !splitLayout.enabled && (
           <div className="mode-switcher">
-            <button aria-pressed={activeTab.mode === "edit"} className={`mode-btn${activeTab.mode === "edit"  ? " active" : ""}`} onClick={() => handleModeChange("edit")}>Edit</button>
-            <button aria-pressed={activeTab.mode === "split"} className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`} onClick={() => handleModeChange("split")}>Preview to Side</button>
-            <button aria-pressed={activeTab.mode === "view"} className={`mode-btn${activeTab.mode === "view"  ? " active" : ""}`} onClick={() => handleModeChange("view")}>Preview</button>
+            <button
+              aria-pressed={activeTab.mode === "edit"}
+              className={`mode-btn${activeTab.mode === "edit" ? " active" : ""}`}
+              onClick={() => handleModeChange("edit")}
+            >
+              Edit
+            </button>
+            <button
+              aria-pressed={activeTab.mode === "split"}
+              className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`}
+              onClick={() => handleModeChange("split")}
+            >
+              Preview to Side
+            </button>
+            <button
+              aria-pressed={activeTab.mode === "view"}
+              className={`mode-btn${activeTab.mode === "view" ? " active" : ""}`}
+              onClick={() => handleModeChange("view")}
+            >
+              Preview
+            </button>
           </div>
         )}
       </header>
 
       {/* ── Main layout ── */}
       <main className="main-layout">
-        <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          onError={showToast}
-        />
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onError={showToast} />
         <div className="content-wrapper">
-          {!splitLayout.enabled && (
-            <TabBar onRequestClose={(id) => requestClose([id])} />
-          )}
+          {!splitLayout.enabled && <TabBar onRequestClose={(id) => requestClose([id])} />}
           <div
             id="editor-content"
             className="content-area"
@@ -757,7 +842,9 @@ function App() {
             : "No document open"}
         </span>
         {activeTab?.type === "markdown" && (
-          <span>Ln {line}, Col {column} | {wordCount} words | Markdown</span>
+          <span>
+            Ln {line}, Col {column} | {wordCount} words | Markdown
+          </span>
         )}
       </footer>
 
@@ -797,9 +884,7 @@ function App() {
                 if (event.key === "Escape") setCommandPaletteOpen(false);
                 else if (event.key === "ArrowDown") {
                   event.preventDefault();
-                  setCommandIndex((index) =>
-                    Math.min(index + 1, visibleCommands.length - 1),
-                  );
+                  setCommandIndex((index) => Math.min(index + 1, visibleCommands.length - 1));
                 } else if (event.key === "ArrowUp") {
                   event.preventDefault();
                   setCommandIndex((index) => Math.max(index - 1, 0));
@@ -832,7 +917,11 @@ function App() {
         </div>
       )}
 
-      {toast && <div className="app-toast" role="status">{toast}</div>}
+      {toast && (
+        <div className="app-toast" role="status">
+          {toast}
+        </div>
+      )}
 
       {pendingClose && (
         <div className="dialog-backdrop" role="presentation">
@@ -853,10 +942,7 @@ function App() {
             </p>
             <div className="save-dialog-actions">
               <button onClick={() => void resolvePendingClose("cancel")}>Cancel</button>
-              <button
-                className="danger"
-                onClick={() => void resolvePendingClose("discard")}
-              >
+              <button className="danger" onClick={() => void resolvePendingClose("discard")}>
                 Don't Save
               </button>
               <button

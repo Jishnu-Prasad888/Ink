@@ -1,15 +1,9 @@
 // components/Sidebar.tsx
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useTabStore } from "../store/tabStore";
-import {
-  FileIcon,
-  FolderIcon,
-  FolderPlusIcon,
-  PlusIcon,
-  TrashIcon,
-} from "./Icons";
+import { FileIcon, FolderIcon, FolderPlusIcon, PlusIcon, TrashIcon } from "./Icons";
 
 interface FileNode {
   name: string;
@@ -24,41 +18,65 @@ interface SidebarProps {
   onError: (message: string) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  isOpen,
-  onClose,
-  onError,
-}) => {
-  const [rootFolder, setRootFolder] = useState<string | null>(null);
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) => {
+  const [rootFolder, setRootFolder] = useState<string | null>(() =>
+    localStorage.getItem("sidebar-root-folder"),
+  );
   const [tree, setTree] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const addTab = useTabStore((state) => state.addTab);
 
-  // Load saved root folder from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar-root-folder");
-    if (saved) {
-      setRootFolder(saved);
-      loadTree(saved);
-    }
-  }, []);
+  const buildTree = useCallback(
+    async (folderPath: string): Promise<FileNode[]> => {
+      const build = async (currentPath: string): Promise<FileNode[]> => {
+        const entries: FileNode[] = await invoke("read_dir", { path: currentPath });
+        const nodes: FileNode[] = [];
+        for (const entry of entries) {
+          const node: FileNode = {
+            name: entry.name,
+            path: entry.path,
+            is_dir: entry.is_dir,
+          };
+          if (entry.is_dir && expanded.has(entry.path)) {
+            node.children = await build(entry.path);
+          }
+          nodes.push(node);
+        }
+        return nodes;
+      };
+      return build(folderPath);
+    },
+    [expanded],
+  );
 
-  const loadTree = async (folderPath: string) => {
-    try {
-      const entries: any[] = await invoke("read_dir", { path: folderPath });
-      const nodes: FileNode[] = entries.map((e) => ({
-        name: e.name,
-        path: e.path,
-        is_dir: e.is_dir,
-      }));
-      setTree(nodes);
-      setRootFolder(folderPath);
-      localStorage.setItem("sidebar-root-folder", folderPath);
-    } catch (err) {
-      console.error("Failed to load folder:", err);
-      onError(`Could not load folder: ${String(err)}`);
-    }
-  };
+  const loadTree = useCallback(
+    async (folderPath: string) => {
+      try {
+        setTree(await buildTree(folderPath));
+        setRootFolder(folderPath);
+        localStorage.setItem("sidebar-root-folder", folderPath);
+      } catch (error) {
+        console.error("Failed to load folder:", error);
+        onError(`Could not load folder: ${String(error)}`);
+      }
+    },
+    [buildTree, onError],
+  );
+
+  useEffect(() => {
+    if (!rootFolder) return;
+    let cancelled = false;
+    buildTree(rootFolder)
+      .then((nodes) => {
+        if (!cancelled) setTree(nodes);
+      })
+      .catch((error) => {
+        if (!cancelled) onError(`Could not refresh folder: ${String(error)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [buildTree, onError, rootFolder]);
 
   const handleOpenFolder = async () => {
     try {
@@ -80,9 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const handleFileClick = async (node: FileNode) => {
     if (node.is_dir) return;
-    const existingTab = useTabStore
-      .getState()
-      .tabs.find((t) => t.filePath === node.path);
+    const existingTab = useTabStore.getState().tabs.find((t) => t.filePath === node.path);
     if (existingTab) {
       useTabStore.getState().setActiveTab(existingTab.id);
       return;
@@ -162,9 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             aria-expanded={node.is_dir ? expanded.has(node.path) : undefined}
             aria-level={level + 1}
             style={{ paddingLeft: `${level * 16 + 12}px` }}
-            onClick={() =>
-              node.is_dir ? toggleExpand(node.path) : handleFileClick(node)
-            }
+            onClick={() => (node.is_dir ? toggleExpand(node.path) : handleFileClick(node))}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -192,9 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </ContextMenu.Trigger>
         {node.is_dir && expanded.has(node.path) && node.children && (
-          <div className="sidebar-children">
-            {renderTree(node.children, level + 1)}
-          </div>
+          <div className="sidebar-children">{renderTree(node.children, level + 1)}</div>
         )}
         <ContextMenu.Portal>
           <ContextMenu.Content className="context-menu-content">
@@ -231,37 +243,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </ContextMenu.Portal>
       </ContextMenu.Root>
     ));
-  };
-
-  // We need to load children on expand – for simplicity, we load recursively upfront.
-  // For a more efficient implementation we'd lazy load, but for demo we load all.
-  // We'll add a useEffect that loads children when expanded changes.
-  useEffect(() => {
-    const loadChildren = async () => {
-      if (!rootFolder) return;
-      const newTree = await buildTree(rootFolder);
-      setTree(newTree);
-    };
-    loadChildren().catch((error) => {
-      onError(`Could not refresh folder: ${String(error)}`);
-    });
-  }, [rootFolder, expanded, onError]);
-
-  const buildTree = async (folderPath: string): Promise<FileNode[]> => {
-    const entries: any[] = await invoke("read_dir", { path: folderPath });
-    const nodes: FileNode[] = [];
-    for (const e of entries) {
-      const node: FileNode = {
-        name: e.name,
-        path: e.path,
-        is_dir: e.is_dir,
-      };
-      if (e.is_dir && expanded.has(e.path)) {
-        node.children = await buildTree(e.path);
-      }
-      nodes.push(node);
-    }
-    return nodes;
   };
 
   if (!isOpen) return null;
@@ -321,11 +302,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
       <div className="sidebar-tree" role="tree" aria-label="Files">
-        {rootFolder ? (
-          renderTree(tree)
-        ) : (
-          <div className="sidebar-placeholder">No folder open</div>
-        )}
+        {rootFolder ? renderTree(tree) : <div className="sidebar-placeholder">No folder open</div>}
       </div>
     </aside>
   );

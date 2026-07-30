@@ -86,7 +86,9 @@
   scrollbar-width: none;
 }
 
-.split-file-panel-tabbar::-webkit-scrollbar { display: none; }
+.split-file-panel-tabbar::-webkit-scrollbar {
+  display: none;
+}
 
 .split-file-panel-tab {
   display: inline-flex;
@@ -102,7 +104,9 @@
   border-radius: 5px 5px 0 0;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.1s, background 0.1s;
+  transition:
+    color 0.1s,
+    background 0.1s;
 }
 
 .split-file-panel-tab:hover {

@@ -37,18 +37,17 @@ const md: MarkdownIt = new MarkdownIt({
   highlight: function (str, lang) {
     if (lang && hljs.getLanguage(lang)) {
       try {
-        if (import.meta.env.DEV)
-          console.log(`[highlight] Lang: ${lang}, length: ${str.length}`);
+        if (import.meta.env.DEV) console.log(`[highlight] Lang: ${lang}, length: ${str.length}`);
         return (
           '<pre class="hljs"><code>' +
           hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
           "</code></pre>"
         );
-      } catch (__) {}
+      } catch (error) {
+        if (import.meta.env.DEV) console.warn("Failed to highlight code block", error);
+      }
     }
-    return (
-      '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + "</code></pre>"
-    );
+    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + "</code></pre>";
   },
 });
 
@@ -72,8 +71,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
 };
 
 export const renderMarkdown = async (content: string): Promise<string> => {
-  if (import.meta.env.DEV)
-    console.log(`[renderMarkdown] Input length: ${content.length}`);
+  if (import.meta.env.DEV) console.log(`[renderMarkdown] Input length: ${content.length}`);
   let html = md.render(content);
   html = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
@@ -81,15 +79,13 @@ export const renderMarkdown = async (content: string): Promise<string> => {
     FORBID_TAGS: ["form", "iframe", "object", "style", "template"],
   });
 
-  if (import.meta.env.DEV)
-    console.log(`[renderMarkdown] Output HTML length: ${html.length}`);
+  if (import.meta.env.DEV) console.log(`[renderMarkdown] Output HTML length: ${html.length}`);
   return html;
 };
 
 export const renderMermaidDiagrams = async (root: ParentNode) => {
   const elements = root.querySelectorAll<HTMLElement>(".mermaid");
-  if (import.meta.env.DEV)
-    console.log(`[renderMermaid] Found ${elements.length} mermaid elements`);
+  if (import.meta.env.DEV) console.log(`[renderMermaid] Found ${elements.length} mermaid elements`);
   if (elements.length > 0) {
     await mermaid.run({
       nodes: elements,

@@ -25,22 +25,19 @@ export const ResizableSplitPane: React.FC<ResizableSplitPaneProps> = ({
     (event: React.PointerEvent) => {
       event.preventDefault();
       isDragging.current = true;
-      startPos.current =
-        direction === "horizontal" ? event.clientX : event.clientY;
+      startPos.current = direction === "horizontal" ? event.clientX : event.clientY;
       startSplit.current = split;
-      document.body.style.cursor =
-        direction === "horizontal" ? "col-resize" : "row-resize";
+      document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
       document.body.style.userSelect = "none";
     },
-    [split, direction]
+    [split, direction],
   );
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
       if (!isDragging.current || !containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const total =
-        direction === "horizontal" ? rect.width : rect.height;
+      const total = direction === "horizontal" ? rect.width : rect.height;
       const delta =
         direction === "horizontal"
           ? event.clientX - startPos.current
@@ -48,7 +45,7 @@ export const ResizableSplitPane: React.FC<ResizableSplitPaneProps> = ({
       const deltaPct = (delta / total) * 100;
       const newSplit = Math.max(
         (minSize / total) * 100,
-        Math.min(100 - (minSize / total) * 100, startSplit.current + deltaPct)
+        Math.min(100 - (minSize / total) * 100, startSplit.current + deltaPct),
       );
       setSplit(newSplit);
     };

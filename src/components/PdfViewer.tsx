@@ -57,8 +57,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
           path: tab.filePath,
         });
 
-        const uint8Array =
-          bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        const uint8Array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
 
         const safeArrayBuffer = new ArrayBuffer(uint8Array.byteLength);
         new Uint8Array(safeArrayBuffer).set(uint8Array);
@@ -106,9 +105,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
         style={{ color: "var(--danger)", flexDirection: "column", gap: "12px" }}
       >
         <div>PDF error</div>
-        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-          {error}
-        </div>
+        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{error}</div>
       </div>
     );
   }
@@ -124,10 +121,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
   return (
     <div className="pdf-viewer" aria-busy={loading}>
       <div className="pdf-toolbar" role="toolbar" aria-label="PDF navigation">
-        <button
-          disabled={pageNumber <= 1}
-          onClick={() => setPageNumber(pageNumber - 1)}
-        >
+        <button disabled={pageNumber <= 1} onClick={() => setPageNumber(pageNumber - 1)}>
           ← Previous
         </button>
         <span>
