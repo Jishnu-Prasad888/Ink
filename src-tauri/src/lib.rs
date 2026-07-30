@@ -233,6 +233,11 @@ fn get_opened_files(files: tauri::State<'_, Vec<String>>) -> Vec<String> {
     files.inner().clone()
 }
 
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
@@ -286,6 +291,7 @@ pub fn run() {
             write_binary_file,
             get_file_info,
             get_opened_files,
+            quit_app,
             read_dir,
             create_file,
             create_dir,

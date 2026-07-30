@@ -11,7 +11,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { destroyWindow } from "./utils/windowClose";
+import { quitApp } from "./utils/appQuit";
 
 interface FileInfo {
   modified: number;
@@ -375,7 +375,7 @@ function App() {
 
       tabIds.forEach((id) => useTabStore.getState().closeTab(id));
       if (closeWindow) {
-        void destroyWindow().catch((error) => {
+        void quitApp().catch((error) => {
           showToast(`Could not close Ink: ${String(error)}`);
         });
       }
@@ -402,7 +402,7 @@ function App() {
       setPendingClose(null);
       if (request.closeWindow) {
         try {
-          await destroyWindow();
+          await quitApp();
         } catch (error) {
           showToast(`Could not close Ink: ${String(error)}`);
         }
