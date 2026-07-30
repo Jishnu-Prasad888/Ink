@@ -11,6 +11,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { destroyWindow } from "./utils/windowClose";
 
 interface FileInfo {
   modified: number;
@@ -182,7 +183,6 @@ function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
-  const allowWindowClose = useRef(false);
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   // Keep stable refs to handlers so keyboard shortcuts always see current state
@@ -363,21 +363,25 @@ function App() {
     if (freshTab) await saveTab(freshTab.id, true);
   }, [saveTab]);
 
-  const requestClose = useCallback((tabIds: string[], closeWindow = false) => {
-    const dirtyTabs = useTabStore
-      .getState()
-      .tabs.filter((tab) => tabIds.includes(tab.id) && tab.type === "markdown" && tab.isDirty);
-    if (dirtyTabs.length > 0) {
-      setPendingClose({ tabIds, closeWindow });
-      return;
-    }
+  const requestClose = useCallback(
+    (tabIds: string[], closeWindow = false) => {
+      const dirtyTabs = useTabStore
+        .getState()
+        .tabs.filter((tab) => tabIds.includes(tab.id) && tab.type === "markdown" && tab.isDirty);
+      if (dirtyTabs.length > 0) {
+        setPendingClose({ tabIds, closeWindow });
+        return;
+      }
 
-    tabIds.forEach((id) => useTabStore.getState().closeTab(id));
-    if (closeWindow) {
-      allowWindowClose.current = true;
-      void getCurrentWindow().close();
-    }
-  }, []);
+      tabIds.forEach((id) => useTabStore.getState().closeTab(id));
+      if (closeWindow) {
+        void destroyWindow().catch((error) => {
+          showToast(`Could not close Ink: ${String(error)}`);
+        });
+      }
+    },
+    [showToast],
+  );
 
   const resolvePendingClose = useCallback(
     async (action: "save" | "discard" | "cancel") => {
@@ -397,11 +401,14 @@ function App() {
       request.tabIds.forEach((id) => useTabStore.getState().closeTab(id));
       setPendingClose(null);
       if (request.closeWindow) {
-        allowWindowClose.current = true;
-        await getCurrentWindow().close();
+        try {
+          await destroyWindow();
+        } catch (error) {
+          showToast(`Could not close Ink: ${String(error)}`);
+        }
       }
     },
-    [pendingClose, saveTab],
+    [pendingClose, saveTab, showToast],
   );
 
   // Keep refs in sync
@@ -423,7 +430,6 @@ function App() {
 
   useEffect(() => {
     const unlisten = getCurrentWindow().onCloseRequested((event) => {
-      if (allowWindowClose.current) return;
       const openTabs = useTabStore.getState().tabs;
       if (openTabs.some((tab) => tab.type === "markdown" && tab.isDirty)) {
         event.preventDefault();
