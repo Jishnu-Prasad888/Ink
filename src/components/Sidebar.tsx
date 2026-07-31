@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useTabStore } from "../store/tabStore";
+import { useRecentFilesStore } from "../store/recentFilesStore";
 import {
   ChevronIcon,
   CloseFolderIcon,
@@ -36,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const requestGeneration = useRef(0);
   const addTab = useTabStore((state) => state.addTab);
+  const addRecentFile = useRecentFilesStore((state) => state.addRecentFile);
   const activeFilePath = useTabStore(
     (state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.filePath,
   );
@@ -135,6 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
     const existingTab = useTabStore.getState().tabs.find((t) => t.filePath === node.path);
     if (existingTab) {
       useTabStore.getState().setActiveTab(existingTab.id);
+      addRecentFile(node.path, node.name);
       return;
     }
     if (node.name.toLowerCase().endsWith(".pdf")) {
@@ -146,6 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
         mode: "view",
         isDirty: false,
       });
+      addRecentFile(node.path, node.name);
     } else {
       try {
         const [content, info] = await Promise.all([
@@ -164,6 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
           diskModifiedAt: info.modified,
           diskFingerprint: info.fingerprint,
         });
+        addRecentFile(node.path, node.name);
       } catch (error) {
         onError(`Could not open ${node.name}: ${String(error)}`);
       }

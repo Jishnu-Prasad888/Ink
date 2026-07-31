@@ -11,6 +11,7 @@ import { SettingsModal } from "./components/SettingsModal";
 import { ExportPdfModal } from "./components/ExportPdfModal";
 import { useTabStore } from "./store/tabStore";
 import { useSettingsStore } from "./store/settingsStore";
+import { useRecentFilesStore } from "./store/recentFilesStore";
 import { formatShortcut, matchesShortcut } from "./utils/shortcuts";
 import { exportMarkdownToPdf } from "./utils/pdfExport";
 import { listen } from "@tauri-apps/api/event";
@@ -303,6 +304,7 @@ function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const { theme, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
+  const { recentFiles, addRecentFile, removeRecentFile, clearRecentFiles } = useRecentFilesStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportTabId, setExportTabId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -343,13 +345,14 @@ function App() {
 
   const openPath = useCallback(
     async (filePath: string) => {
+      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
       const existing = useTabStore.getState().tabs.find((tab) => tab.filePath === filePath);
       if (existing) {
         useTabStore.getState().setActiveTab(existing.id);
+        addRecentFile(filePath, fileName);
         return;
       }
 
-      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
       if (filePath.toLowerCase().endsWith(".pdf")) {
         addTab({
           filePath,
@@ -359,6 +362,7 @@ function App() {
           isDirty: false,
           type: "pdf",
         });
+        addRecentFile(filePath, fileName);
         return;
       }
 
@@ -371,6 +375,7 @@ function App() {
         .tabs.find((tab) => tab.filePath === filePath);
       if (openedWhileReading) {
         useTabStore.getState().setActiveTab(openedWhileReading.id);
+        addRecentFile(filePath, fileName);
         return;
       }
       addTab({
@@ -383,8 +388,9 @@ function App() {
         diskModifiedAt: info.modified,
         diskFingerprint: info.fingerprint,
       });
+      addRecentFile(filePath, fileName);
     },
-    [addTab],
+    [addRecentFile, addTab],
   );
 
   const handleOpenFile = useCallback(async () => {
@@ -395,6 +401,19 @@ function App() {
       showToast(`Could not open file: ${String(error)}`);
     }
   }, [openPath, showToast]);
+
+  const handleOpenRecentFile = useCallback(
+    async (filePath: string) => {
+      try {
+        await invoke("get_file_info", { path: filePath });
+        await openPath(filePath);
+      } catch (error) {
+        removeRecentFile(filePath);
+        showToast(`Could not open recent file: ${String(error)}`);
+      }
+    },
+    [openPath, removeRecentFile, showToast],
+  );
 
   const saveTab = useCallback(
     async (tabId: string, saveAs = false) => {
@@ -465,6 +484,7 @@ function App() {
           diskModifiedAt: result.modified,
           diskFingerprint: result.fingerprint,
         });
+        addRecentFile(savePath, fileName);
         showToast(`Saved ${fileName}`);
         return true;
       } catch (error) {
@@ -472,7 +492,7 @@ function App() {
         return false;
       }
     },
-    [markTabSaved, showToast],
+    [addRecentFile, markTabSaved, showToast],
   );
 
   const handleSaveFile = useCallback(async () => {
@@ -795,6 +815,37 @@ function App() {
               Open file
             </button>
           </div>
+          {recentFiles.length > 0 && (
+            <section className="recent-files" aria-labelledby="recent-files-title">
+              <div className="recent-files-header">
+                <h3 id="recent-files-title">Recent</h3>
+                <button onClick={clearRecentFiles}>Clear</button>
+              </div>
+              <div className="recent-files-list">
+                {recentFiles.slice(0, 5).map((file) => (
+                  <button
+                    key={file.path}
+                    className="recent-file"
+                    onClick={() => void handleOpenRecentFile(file.path)}
+                    title={file.path}
+                  >
+                    <span
+                      className={`recent-file-type${file.path.toLowerCase().endsWith(".pdf") ? " pdf" : ""}`}
+                    >
+                      {file.path.toLowerCase().endsWith(".pdf") ? "PDF" : "MD"}
+                    </span>
+                    <span className="recent-file-details">
+                      <strong>{file.fileName}</strong>
+                      <small>{file.path}</small>
+                    </span>
+                    <span className="recent-file-open" aria-hidden="true">
+                      Open
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       );
     }

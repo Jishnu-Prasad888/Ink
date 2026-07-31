@@ -710,6 +710,8 @@
   justify-content: center;
   height: 100%;
   gap: 6px;
+  padding-block: 24px;
+  overflow-y: auto;
   background: var(--surface);
 }
 
@@ -729,6 +731,134 @@
   display: flex;
   gap: 8px;
   margin-top: 18px;
+}
+
+.recent-files {
+  width: min(540px, calc(100% - 40px));
+  padding: 12px;
+  margin-top: 22px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow:
+    0 10px 26px rgb(0 0 0 / 10%),
+    inset 0 1px 0 rgb(255 255 255 / 9%);
+}
+
+.recent-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 8px;
+}
+
+.recent-files-header h3 {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recent-files-header button {
+  padding: 2px 5px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font: 10.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.recent-files-header button:hover {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.recent-files-list {
+  display: grid;
+  gap: 3px;
+}
+
+.recent-file {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-family: var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.recent-file:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--border);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 8%);
+}
+
+.recent-file-type {
+  display: grid;
+  width: 32px;
+  height: 28px;
+  place-items: center;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+  font: 700 8px var(--font-editor);
+}
+
+.recent-file-type.pdf {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.recent-file-details {
+  display: block;
+  min-width: 0;
+}
+
+.recent-file-details strong,
+.recent-file-details small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-file-details strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.recent-file-details small {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.recent-file-open {
+  color: var(--text-muted);
+  font-size: 10px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
+}
+
+.recent-file:hover .recent-file-open,
+.recent-file:focus-visible .recent-file-open {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .welcome-btn {
