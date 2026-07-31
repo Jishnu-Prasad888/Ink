@@ -14,6 +14,12 @@ const addSavedTab = (fileName = "notes.md") => {
   return useTabStore.getState().activeTabId!;
 };
 
+const emptyPanel = () => ({
+  tabId: null,
+  viewMode: "edit" as const,
+  previewWidth: "readable" as const,
+});
+
 describe("tab document state", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -24,7 +30,7 @@ describe("tab document state", () => {
       splitLayout: {
         enabled: false,
         direction: "horizontal",
-        panels: [{ tabId: null }, { tabId: null }],
+        panels: [emptyPanel(), emptyPanel()],
         activePanelIndex: 0,
         tabPanelAssignments: {},
       },
@@ -65,7 +71,7 @@ describe("split tab ownership", () => {
       splitLayout: {
         enabled: false,
         direction: "horizontal",
-        panels: [{ tabId: null }, { tabId: null }],
+        panels: [emptyPanel(), emptyPanel()],
         activePanelIndex: 0,
         tabPanelAssignments: {},
       },
@@ -81,7 +87,7 @@ describe("split tab ownership", () => {
     useTabStore.getState().enableSplitLayout("horizontal");
 
     const layout = useTabStore.getState().splitLayout;
-    expect(layout.panels).toEqual([{ tabId: first }, { tabId: second }]);
+    expect(layout.panels.map((panel) => panel.tabId)).toEqual([first, second]);
     expect(layout.tabPanelAssignments).toEqual({
       [first]: 0,
       [second]: 1,
@@ -100,7 +106,7 @@ describe("split tab ownership", () => {
 
     const layout = useTabStore.getState().splitLayout;
     expect(layout.tabPanelAssignments[second]).toBe(0);
-    expect(layout.panels).toEqual([{ tabId: second }, { tabId: third }]);
+    expect(layout.panels.map((panel) => panel.tabId)).toEqual([second, third]);
   });
 
   it("assigns new tabs only to the focused pane", () => {
@@ -115,5 +121,52 @@ describe("split tab ownership", () => {
     const layout = useTabStore.getState().splitLayout;
     expect(layout.tabPanelAssignments[third]).toBe(1);
     expect(layout.panels[1].tabId).toBe(third);
+  });
+
+  it("does not create a split until two tabs are open", () => {
+    addSavedTab("one.md");
+    useTabStore.getState().enableSplitLayout("horizontal");
+    expect(useTabStore.getState().splitLayout.enabled).toBe(false);
+  });
+
+  it("closes the split when either pane loses its last tab", () => {
+    const first = addSavedTab("one.md");
+    addSavedTab("two.md");
+    useTabStore.getState().setActiveTab(first);
+    useTabStore.getState().enableSplitLayout("horizontal");
+
+    useTabStore.getState().closeTab(first);
+
+    const state = useTabStore.getState();
+    expect(state.splitLayout.enabled).toBe(false);
+    expect(state.splitLayout.tabPanelAssignments).toEqual({});
+    expect(state.activeTabId).toBe(state.tabs[0].id);
+  });
+
+  it("closes the split when the only tab is moved out of a pane", () => {
+    const first = addSavedTab("one.md");
+    const second = addSavedTab("two.md");
+    useTabStore.getState().setActiveTab(first);
+    useTabStore.getState().enableSplitLayout("horizontal");
+
+    useTabStore.getState().setPanelTab(1, first);
+
+    expect(useTabStore.getState().splitLayout.enabled).toBe(false);
+    expect(useTabStore.getState().activeTabId).toBe(first);
+    expect(useTabStore.getState().tabs.map((tab) => tab.id)).toEqual([first, second]);
+  });
+
+  it("keeps view mode and preview width independent per pane", () => {
+    const first = addSavedTab("one.md");
+    addSavedTab("two.md");
+    useTabStore.getState().setActiveTab(first);
+    useTabStore.getState().enableSplitLayout("horizontal");
+
+    useTabStore.getState().setSplitPanelViewMode(1, "view");
+    useTabStore.getState().setSplitPanelPreviewWidth(1, "full");
+
+    const [left, right] = useTabStore.getState().splitLayout.panels;
+    expect(left).toMatchObject({ viewMode: "edit", previewWidth: "readable" });
+    expect(right).toMatchObject({ viewMode: "view", previewWidth: "full" });
   });
 });

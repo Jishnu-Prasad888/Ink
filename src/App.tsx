@@ -103,7 +103,17 @@ const Icon = {
 };
 
 // Renders the content for one tab according to its mode
-function TabContent({ tabId, onFocus }: { tabId: string | null; onFocus?: () => void }) {
+function TabContent({
+  tabId,
+  onFocus,
+  viewMode,
+  previewWidth = "readable",
+}: {
+  tabId: string | null;
+  onFocus?: () => void;
+  viewMode?: "edit" | "view";
+  previewWidth?: "readable" | "full";
+}) {
   const tabs = useTabStore((s) => s.tabs);
   const tab = tabs.find((t) => t.id === tabId);
 
@@ -117,11 +127,18 @@ function TabContent({ tabId, onFocus }: { tabId: string | null; onFocus?: () => 
 
   if (tab.type === "pdf") return <PdfViewer key={tab.id} tab={tab} />;
 
-  switch (tab.mode) {
+  switch (viewMode ?? tab.mode) {
     case "view":
-      return <MarkdownPreview key={tab.id} tab={tab} />;
+      return (
+        <MarkdownPreview
+          key={tab.id}
+          tab={tab}
+          widthMode={previewWidth}
+          showWidthToggle={viewMode === undefined}
+        />
+      );
     case "split":
-      return <SplitView key={tab.id} tab={tab} />;
+      return viewMode === undefined ? <SplitView key={tab.id} tab={tab} /> : <Editor tab={tab} />;
     default:
       return <Editor key={tab.id} tab={tab} />;
   }
@@ -139,9 +156,12 @@ function SplitFilePanel({
   onFocus: () => void;
   onRequestClose: (id: string) => void;
 }) {
-  const { tabs, splitLayout, setPanelTab } = useTabStore();
-  const panelTabId = splitLayout.panels[panelIndex].tabId;
+  const { tabs, splitLayout, setPanelTab, setSplitPanelViewMode, setSplitPanelPreviewWidth } =
+    useTabStore();
+  const panel = splitLayout.panels[panelIndex];
+  const panelTabId = panel.tabId;
   const panelTabs = tabs.filter((tab) => splitLayout.tabPanelAssignments[tab.id] === panelIndex);
+  const panelTab = tabs.find((tab) => tab.id === panelTabId);
   const contentId = `split-panel-${panelIndex}-content`;
 
   const navigateTabs = (direction: "previous" | "next" | "first" | "last", index: number) => {
@@ -167,49 +187,93 @@ function SplitFilePanel({
       className={`split-file-panel ${isActive ? "split-file-panel--active" : ""}`}
       onClick={onFocus}
     >
-      <div
-        className="tab-bar split-file-panel-tabbar"
-        role="tablist"
-        aria-label={`Open documents in panel ${panelIndex + 1}`}
-        onDragOver={(event) => {
-          if (!event.dataTransfer.types.includes("application/x-ink-tab")) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-        }}
-        onDrop={(event) => {
-          const tabId = event.dataTransfer.getData("application/x-ink-tab");
-          if (!tabId) return;
-          event.preventDefault();
-          setPanelTab(panelIndex, tabId);
-        }}
-      >
-        {panelTabs.map((tab, index) => (
-          <div
-            key={tab.id}
-            role="presentation"
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData("application/x-ink-tab", tab.id);
-              event.dataTransfer.effectAllowed = "move";
-            }}
-          >
-            <Tab
-              tab={tab}
-              isActive={panelTabId === tab.id}
-              onSelect={() => {
-                setPanelTab(panelIndex, tab.id);
-                onFocus();
+      <div className="split-file-panel-header">
+        <div
+          className="tab-bar split-file-panel-tabbar"
+          role="tablist"
+          aria-label={`Open documents in panel ${panelIndex + 1}`}
+          onDragOver={(event) => {
+            if (!event.dataTransfer.types.includes("application/x-ink-tab")) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={(event) => {
+            const tabId = event.dataTransfer.getData("application/x-ink-tab");
+            if (!tabId) return;
+            event.preventDefault();
+            setPanelTab(panelIndex, tabId);
+          }}
+        >
+          {panelTabs.map((tab, index) => (
+            <div
+              key={tab.id}
+              role="presentation"
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData("application/x-ink-tab", tab.id);
+                event.dataTransfer.effectAllowed = "move";
               }}
-              onClose={() => onRequestClose(tab.id)}
-              onNavigate={(direction) => navigateTabs(direction, index)}
-              elementId={`split-panel-${panelIndex}-tab-${tab.id}`}
-              controlsId={contentId}
-            />
+            >
+              <Tab
+                tab={tab}
+                isActive={panelTabId === tab.id}
+                onSelect={() => {
+                  setPanelTab(panelIndex, tab.id);
+                  onFocus();
+                }}
+                onClose={() => onRequestClose(tab.id)}
+                onNavigate={(direction) => navigateTabs(direction, index)}
+                elementId={`split-panel-${panelIndex}-tab-${tab.id}`}
+                controlsId={contentId}
+              />
+            </div>
+          ))}
+        </div>
+        {panelTab?.type === "markdown" && (
+          <div className="split-panel-controls" role="group" aria-label="Panel view options">
+            <button
+              className={panel.viewMode === "edit" ? "active" : ""}
+              aria-pressed={panel.viewMode === "edit"}
+              onClick={() => setSplitPanelViewMode(panelIndex, "edit")}
+            >
+              Edit
+            </button>
+            <button
+              className={panel.viewMode === "view" ? "active" : ""}
+              aria-pressed={panel.viewMode === "view"}
+              onClick={() => setSplitPanelViewMode(panelIndex, "view")}
+            >
+              Preview
+            </button>
+            {panel.viewMode === "view" && (
+              <>
+                <span className="split-control-divider" aria-hidden="true" />
+                <button
+                  className={panel.previewWidth === "readable" ? "active" : ""}
+                  aria-pressed={panel.previewWidth === "readable"}
+                  onClick={() => setSplitPanelPreviewWidth(panelIndex, "readable")}
+                >
+                  Readable
+                </button>
+                <button
+                  className={panel.previewWidth === "full" ? "active" : ""}
+                  aria-pressed={panel.previewWidth === "full"}
+                  onClick={() => setSplitPanelPreviewWidth(panelIndex, "full")}
+                >
+                  Full
+                </button>
+              </>
+            )}
           </div>
-        ))}
+        )}
       </div>
       <div id={contentId} className="split-file-panel-content">
-        <TabContent tabId={panelTabId} onFocus={onFocus} />
+        <TabContent
+          tabId={panelTabId}
+          onFocus={onFocus}
+          viewMode={panel.viewMode}
+          previewWidth={panel.previewWidth}
+        />
       </div>
     </div>
   );
@@ -226,6 +290,7 @@ function App() {
     disableSplitLayout,
     setSplitDirection,
     setActiveSplitPanel,
+    setSplitPanelViewMode,
     markTabSaved,
     reopenLastClosed,
     setActiveTab,
@@ -578,11 +643,21 @@ function App() {
             ? "view"
             : null;
       if (requestedMode) {
-        const { activeTabId: aid, tabs: t, updateTab: ut } = useTabStore.getState();
+        const {
+          activeTabId: aid,
+          tabs: t,
+          updateTab: ut,
+          splitLayout: layout,
+          setSplitPanelViewMode: setPanelMode,
+        } = useTabStore.getState();
         const tab = t.find((x) => x.id === aid);
         if (!tab) return;
         e.preventDefault();
-        ut(tab.id, { mode: requestedMode });
+        if (layout.enabled) {
+          setPanelMode(layout.activePanelIndex, requestedMode === "edit" ? "edit" : "view");
+        } else {
+          ut(tab.id, { mode: requestedMode });
+        }
       }
     };
 
@@ -659,7 +734,12 @@ function App() {
 
   // ── Mode change ──────────────────────────────────────────────────────────
   const handleModeChange = (mode: "view" | "edit" | "split") => {
-    if (activeTab) updateTab(activeTab.id, { mode });
+    if (!activeTab) return;
+    if (splitLayout.enabled) {
+      setSplitPanelViewMode(splitLayout.activePanelIndex, mode === "edit" ? "edit" : "view");
+    } else {
+      updateTab(activeTab.id, { mode });
+    }
   };
 
   // ── Content rendering ────────────────────────────────────────────────────
@@ -829,14 +909,22 @@ function App() {
               <button
                 className="toolbar-btn"
                 onClick={() => enableSplitLayout("horizontal")}
-                title="Open editor group to the right"
+                title={
+                  tabs.length < 2
+                    ? "Open another tab before splitting"
+                    : "Open editor group to the right"
+                }
+                disabled={tabs.length < 2}
               >
                 <Icon.SplitH /> Split Right
               </button>
               <button
                 className="toolbar-btn"
                 onClick={() => enableSplitLayout("vertical")}
-                title="Open editor group below"
+                title={
+                  tabs.length < 2 ? "Open another tab before splitting" : "Open editor group below"
+                }
+                disabled={tabs.length < 2}
               >
                 <Icon.SplitV /> Split Down
               </button>

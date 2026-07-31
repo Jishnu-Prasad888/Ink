@@ -7,15 +7,23 @@ interface MarkdownPreviewProps {
   tab: Tab;
   isSplit?: boolean;
   searchQuery?: string;
+  widthMode?: "readable" | "full";
+  onWidthModeChange?: (mode: "readable" | "full") => void;
+  showWidthToggle?: boolean;
 }
 
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   tab,
   isSplit = false,
   searchQuery = "",
+  widthMode,
+  onWidthModeChange,
+  showWidthToggle = true,
 }) => {
   const [html, setHtml] = useState("");
-  const [isFullWidth, setIsFullWidth] = useState(false);
+  const [localWidthMode, setLocalWidthMode] = useState<"readable" | "full">("readable");
+  const resolvedWidthMode = widthMode ?? localWidthMode;
+  const isFullWidth = resolvedWidthMode === "full";
 
   const previewRef = useRef<HTMLDivElement>(null);
   const updateTab = useTabStore((state) => state.updateTab);
@@ -131,15 +139,21 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   return (
     <div className="preview-container">
-      <div className="preview-toolbar">
-        <button
-          className="preview-width-toggle"
-          onClick={() => setIsFullWidth((prev) => !prev)}
-          aria-pressed={isFullWidth}
-        >
-          {isFullWidth ? "Readable Width" : "Full Width"}
-        </button>
-      </div>
+      {showWidthToggle && (
+        <div className="preview-toolbar">
+          <button
+            className="preview-width-toggle"
+            onClick={() => {
+              const nextMode = isFullWidth ? "readable" : "full";
+              setLocalWidthMode(nextMode);
+              onWidthModeChange?.(nextMode);
+            }}
+            aria-pressed={isFullWidth}
+          >
+            {isFullWidth ? "Readable Width" : "Full Width"}
+          </button>
+        </div>
+      )}
 
       {/* Preview */}
       <div
