@@ -304,12 +304,13 @@ function App() {
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const { theme, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportTabId, setExportTabId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const exportTab = tabs.find((tab) => tab.id === exportTabId && tab.type === "markdown");
 
   // Keep stable refs to handlers so keyboard shortcuts always see current state
   const handleSaveFileRef = useRef<() => Promise<void>>(async () => {});
@@ -489,9 +490,7 @@ function App() {
   }, [saveTab]);
 
   const handleExportPdf = useCallback(async () => {
-    const tab = useTabStore
-      .getState()
-      .tabs.find((item) => item.id === useTabStore.getState().activeTabId);
+    const tab = useTabStore.getState().tabs.find((item) => item.id === exportTabId);
     if (!tab || tab.type !== "markdown" || tab.content === null) return;
     setIsExporting(true);
     try {
@@ -500,13 +499,13 @@ function App() {
         tab.fileName,
         useSettingsStore.getState().pdfOrientation,
       );
-      setExportDialogOpen(false);
+      setExportTabId(null);
     } catch (error) {
       showToast(`Could not export ${tab.fileName}: ${String(error)}`);
     } finally {
       setIsExporting(false);
     }
-  }, [showToast]);
+  }, [exportTabId, showToast]);
 
   const requestClose = useCallback(
     (tabIds: string[], closeWindow = false) => {
@@ -592,6 +591,13 @@ function App() {
     const onKeyDown = async (e: KeyboardEvent) => {
       if (e.isComposing) return;
       if (settingsOpen) return;
+      if (exportTab) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setExportTabId(null);
+        }
+        return;
+      }
       if (matchesShortcut(e, shortcuts["app.settings"])) {
         e.preventDefault();
         setSettingsOpen(true);
@@ -641,7 +647,7 @@ function App() {
         const tab = useTabStore
           .getState()
           .tabs.find((item) => item.id === useTabStore.getState().activeTabId);
-        if (tab?.type === "markdown") setExportDialogOpen(true);
+        if (tab?.type === "markdown") setExportTabId(tab.id);
         return;
       }
       if (
@@ -695,7 +701,7 @@ function App() {
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [reopenLastClosed, setActiveTab, settingsOpen, shortcuts]);
+  }, [exportTab, reopenLastClosed, setActiveTab, settingsOpen, shortcuts]);
 
   // ── Drag & drop ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -853,7 +859,7 @@ function App() {
     {
       label: "File: Export PDF",
       shortcut: formatShortcut(shortcuts["file.exportPdf"]),
-      run: () => activeTab?.type === "markdown" && setExportDialogOpen(true),
+      run: () => activeTab?.type === "markdown" && setExportTabId(activeTab.id),
     },
     {
       label: sidebarOpen ? "View: Hide Explorer" : "View: Show Explorer",
@@ -950,7 +956,7 @@ function App() {
           </button>
           <button
             className="toolbar-btn toolbar-compact-action"
-            onClick={() => setExportDialogOpen(true)}
+            onClick={() => activeTab && setExportTabId(activeTab.id)}
             title={`Export PDF (${formatShortcut(shortcuts["file.exportPdf"])})`}
             disabled={!activeTab || activeTab.type !== "markdown"}
           >
@@ -1082,13 +1088,13 @@ function App() {
 
       {settingsOpen && <SettingsModal isOpen onClose={() => setSettingsOpen(false)} />}
 
-      {exportDialogOpen && activeTab?.type === "markdown" && (
+      {exportTab && (
         <ExportPdfModal
-          fileName={activeTab.fileName}
+          fileName={exportTab.fileName}
           orientation={pdfOrientation}
           isExporting={isExporting}
           onOrientationChange={setPdfOrientation}
-          onCancel={() => setExportDialogOpen(false)}
+          onCancel={() => setExportTabId(null)}
           onExport={() => void handleExportPdf()}
         />
       )}

@@ -83,7 +83,8 @@ export const formatShortcut = (shortcut: string) => {
 
 export const shortcutToCodeMirror = (shortcut: string) => {
   const parts = shortcut.split("+");
-  const key = parts.pop() ?? "";
+  const rawKey = parts.pop() ?? "";
+  const key = /^[A-Z]$/.test(rawKey) ? rawKey.toLowerCase() : rawKey;
   const modifiers = ["Shift", "Alt", "Ctrl", "Meta", "Mod"].filter((part) => parts.includes(part));
   return [...modifiers, key].join("-");
 };

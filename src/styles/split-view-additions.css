@@ -89,11 +89,14 @@
 
 .split-panel-controls {
   display: flex;
-  flex: 0 0 auto;
+  max-width: 60%;
+  flex: 0 1 auto;
   align-items: center;
   gap: 2px;
   padding: 5px 7px;
+  overflow-x: auto;
   border-left: 1px solid var(--border);
+  scrollbar-width: thin;
 }
 
 .split-panel-controls button {

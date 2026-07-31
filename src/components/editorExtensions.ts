@@ -24,6 +24,7 @@ const cursorCommand =
   };
 
 export const closeMarkdownCodeFence: StateCommand = ({ state, dispatch }) => {
+  if (state.selection.ranges.length > 1) return false;
   let handled = false;
   const transaction = state.changeByRange((range) => {
     if (!range.empty) return { range };
@@ -54,6 +55,7 @@ export const closeMarkdownCodeFence: StateCommand = ({ state, dispatch }) => {
 };
 
 export const continueIndentedBlockquote: StateCommand = ({ state, dispatch }) => {
+  if (state.selection.ranges.length > 1) return false;
   const range = state.selection.main;
   if (!range.empty) return false;
   const line = state.doc.lineAt(range.head);

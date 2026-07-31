@@ -102,8 +102,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
     try {
       const selected: string[] = await invoke("open_folder_dialog");
       if (selected.length > 0) {
+        requestGeneration.current += 1;
+        setTree([]);
         setExpanded(new Set());
-        await loadTree(selected[0]);
+        setRootFolder(selected[0]);
+        localStorage.setItem("sidebar-root-folder", selected[0]);
       }
     } catch (error) {
       onError(`Could not open folder: ${String(error)}`);

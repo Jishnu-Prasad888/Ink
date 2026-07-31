@@ -41,7 +41,13 @@ export const exportMarkdownToPdf = async (
   const previousTitle = document.title;
   document.title = fileName.replace(/\.(md|markdown)$/i, "");
 
+  let cleaned = false;
+  let cleanupTimer: number | undefined;
   const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    window.removeEventListener("afterprint", cleanup);
+    if (cleanupTimer !== undefined) window.clearTimeout(cleanupTimer);
     printRoot.remove();
     pageStyle.remove();
     document.title = previousTitle;
@@ -53,7 +59,7 @@ export const exportMarkdownToPdf = async (
     await waitForImages(printRoot);
     window.addEventListener("afterprint", cleanup, { once: true });
     window.print();
-    window.setTimeout(cleanup, 60_000);
+    cleanupTimer = window.setTimeout(cleanup, 60_000);
   } catch (error) {
     cleanup();
     throw error;

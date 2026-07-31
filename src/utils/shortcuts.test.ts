@@ -13,5 +13,6 @@ describe("keyboard shortcuts", () => {
   it("converts settings bindings to CodeMirror key syntax", () => {
     expect(shortcutToCodeMirror("Alt+Shift+ArrowDown")).toBe("Shift-Alt-ArrowDown");
     expect(shortcutToCodeMirror("Alt+ArrowUp")).toBe("Alt-ArrowUp");
+    expect(shortcutToCodeMirror("Mod+Shift+M")).toBe("Shift-Mod-m");
   });
 });

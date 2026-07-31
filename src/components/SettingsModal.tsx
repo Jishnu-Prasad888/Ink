@@ -52,6 +52,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
     const shortcut = shortcutFromEvent(event);
     if (!shortcut) return;
+    const definition = shortcutDefinitions.find((item) => item.id === id);
+    if (definition?.group !== "Editor" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      setShortcutError("Application shortcuts must include Ctrl, Command, or Alt.");
+      return;
+    }
     const conflict = shortcutDefinitions.find(
       (definition) =>
         definition.id !== id && shortcuts[definition.id].toLowerCase() === shortcut.toLowerCase(),
