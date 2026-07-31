@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from "react";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { Tab, useTabStore } from "../store/tabStore";
 
 interface EditorProps {
@@ -12,6 +14,37 @@ interface EditorProps {
 const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[Editor:${msg}]`, data ?? "");
 };
+
+const markdownHighlightStyle = HighlightStyle.define([
+  { tag: tags.content, color: "var(--text-primary)" },
+  { tag: tags.heading, color: "var(--text-primary)", fontWeight: "650" },
+  { tag: tags.heading1, fontSize: "1.12em" },
+  { tag: tags.heading2, fontSize: "1.05em" },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--accent)",
+    textDecoration: "underline",
+    textDecorationColor: "var(--accent-border)",
+    textUnderlineOffset: "2px",
+  },
+  { tag: tags.strong, color: "var(--text-primary)", fontWeight: "700" },
+  { tag: tags.emphasis, color: "var(--text-secondary)", fontStyle: "italic" },
+  { tag: tags.strikethrough, color: "var(--text-secondary)", textDecoration: "line-through" },
+  { tag: tags.quote, color: "var(--text-muted)", fontStyle: "italic" },
+  { tag: tags.list, color: "var(--text-secondary)" },
+  { tag: tags.monospace, color: "var(--syntax-cyan)" },
+  { tag: tags.contentSeparator, color: "var(--border-strong)" },
+  { tag: [tags.meta, tags.punctuation], color: "var(--text-muted)" },
+  { tag: tags.comment, color: "var(--syntax-comment)", fontStyle: "italic" },
+  { tag: [tags.keyword, tags.tagName], color: "var(--syntax-red)" },
+  { tag: [tags.string, tags.regexp], color: "var(--syntax-cyan)" },
+  { tag: [tags.number, tags.bool, tags.atom], color: "var(--syntax-blue)" },
+  { tag: [tags.typeName, tags.className], color: "var(--syntax-purple)" },
+  { tag: tags.operator, color: "var(--syntax-orange)" },
+  { tag: tags.variableName, color: "var(--text-secondary)" },
+  { tag: tags.inserted, color: "var(--syntax-green)" },
+  { tag: [tags.deleted, tags.invalid], color: "var(--danger)" },
+]);
 
 const customTheme = EditorView.theme({
   "&": {
@@ -75,18 +108,6 @@ const customTheme = EditorView.theme({
       color: "var(--text-primary)",
     },
   },
-  // Markdown syntax
-  ".cm-header": { color: "var(--text-primary)", fontWeight: "500" },
-  ".cm-header-1": { fontSize: "1.12em" },
-  ".cm-header-2": { fontSize: "1.05em" },
-  ".cm-strong": { color: "var(--text-primary)", fontWeight: "600" },
-  ".cm-em": { color: "var(--text-secondary)", fontStyle: "italic" },
-  ".cm-link": { color: "var(--accent)" },
-  ".cm-url": { color: "var(--accent)" },
-  ".cm-quote": { color: "var(--text-muted)", fontStyle: "italic" },
-  ".cm-code": { color: "var(--accent)", background: "var(--accent-bg)", borderRadius: "3px" },
-  ".cm-hr": { color: "var(--border-strong)" },
-  ".cm-list": { color: "var(--text-secondary)" },
 });
 
 export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
@@ -173,7 +194,11 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
           }
         }}
         theme={customTheme}
-        extensions={[markdown(), EditorView.lineWrapping]}
+        extensions={[
+          markdown(),
+          syntaxHighlighting(markdownHighlightStyle),
+          EditorView.lineWrapping,
+        ]}
         style={{ flex: 1, minHeight: 0, overflow: "hidden" }}
         basicSetup={{
           lineNumbers: true,
