@@ -38,7 +38,20 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "ink-settings",
-      version: 1,
+      version: 2,
+      migrate: (persisted, version) => {
+        const saved = persisted as Partial<SettingsStore>;
+        if (version < 2 && saved.shortcuts?.["app.commandPalette"] === "Mod+Shift+P") {
+          return {
+            ...saved,
+            shortcuts: {
+              ...saved.shortcuts,
+              "app.commandPalette": defaultShortcuts["app.commandPalette"],
+            },
+          };
+        }
+        return saved;
+      },
       merge: (persisted, current) => {
         const saved = persisted as Partial<SettingsStore>;
         return {

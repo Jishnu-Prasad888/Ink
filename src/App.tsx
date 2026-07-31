@@ -1100,7 +1100,7 @@ function App() {
               setCommandQuery("");
               setCommandIndex(0);
             }}
-            title={`Command Palette (${formatShortcut(shortcuts["app.commandPalette"])})`}
+            title={`Commands (${formatShortcut(shortcuts["app.commandPalette"])})`}
           >
             Commands
           </button>

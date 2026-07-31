@@ -4,7 +4,7 @@ export const shortcutDefinitions = [
     id: "app.commandPalette",
     label: "Command palette",
     group: "Application",
-    defaultKey: "Mod+Shift+P",
+    defaultKey: "Mod+`",
   },
   {
     id: "view.toggleExplorer",
