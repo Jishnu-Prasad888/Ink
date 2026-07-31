@@ -4,12 +4,15 @@ import { defaultShortcuts, type ShortcutId, type ShortcutMap } from "../utils/sh
 
 export type ColorTheme = "system" | "light" | "dark" | "nord" | "charcoal";
 export type PdfOrientation = "portrait" | "landscape";
+export type AppFont = "system" | "modern" | "accessible" | "serif" | "monospace";
 
 interface SettingsStore {
   theme: ColorTheme;
+  appFont: AppFont;
   pdfOrientation: PdfOrientation;
   shortcuts: ShortcutMap;
   setTheme: (theme: ColorTheme) => void;
+  setAppFont: (font: AppFont) => void;
   setPdfOrientation: (orientation: PdfOrientation) => void;
   setShortcut: (id: ShortcutId, shortcut: string) => void;
   resetShortcut: (id: ShortcutId) => void;
@@ -17,6 +20,7 @@ interface SettingsStore {
 }
 
 const validThemes: ColorTheme[] = ["system", "light", "dark", "nord", "charcoal"];
+const validFonts: AppFont[] = ["system", "modern", "accessible", "serif", "monospace"];
 const legacyTheme =
   typeof localStorage === "undefined"
     ? null
@@ -26,9 +30,11 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       theme: legacyTheme && validThemes.includes(legacyTheme) ? legacyTheme : "system",
+      appFont: "system",
       pdfOrientation: "portrait",
       shortcuts: defaultShortcuts,
       setTheme: (theme) => set({ theme }),
+      setAppFont: (appFont) => set({ appFont }),
       setPdfOrientation: (pdfOrientation) => set({ pdfOrientation }),
       setShortcut: (id, shortcut) =>
         set((state) => ({ shortcuts: { ...state.shortcuts, [id]: shortcut } })),
@@ -58,6 +64,8 @@ export const useSettingsStore = create<SettingsStore>()(
           ...current,
           ...saved,
           theme: saved.theme && validThemes.includes(saved.theme) ? saved.theme : current.theme,
+          appFont:
+            saved.appFont && validFonts.includes(saved.appFont) ? saved.appFont : current.appFont,
           shortcuts: { ...defaultShortcuts, ...saved.shortcuts },
         };
       },

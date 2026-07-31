@@ -56,6 +56,33 @@
   color-scheme: light;
 }
 
+[data-font="system"] {
+  --font-ui: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-font="modern"] {
+  --font-ui: "Avenir Next", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+[data-font="accessible"] {
+  --font-ui: "Atkinson Hyperlegible", Verdana, Tahoma, ui-sans-serif, sans-serif;
+}
+
+[data-font="serif"] {
+  --font-ui: Charter, "Bitstream Charter", "Sitka Text", Georgia, serif;
+}
+
+[data-font="monospace"] {
+  --font-ui: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 [data-theme="dark"] {
   --bg: #101318;
   --surface: #181c22;
@@ -1687,6 +1714,12 @@
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
+}
+
+.font-setting {
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .theme-grid {

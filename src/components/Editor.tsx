@@ -56,7 +56,7 @@ const customTheme = EditorView.theme({
   },
   "&.cm-focused": { outline: "1px solid var(--accent-border)" },
   ".cm-scroller": {
-    fontFamily: "var(--font-editor)",
+    fontFamily: "var(--font-ui)",
     fontSize: "13.5px",
     lineHeight: "1.75",
     // Must be "auto" (not hidden/clip) so the native scrollbar renders.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSettingsStore, type ColorTheme } from "../store/settingsStore";
+import { useSettingsStore, type AppFont, type ColorTheme } from "../store/settingsStore";
 import {
   defaultShortcuts,
   formatShortcut,
@@ -21,12 +21,22 @@ const themes: { value: ColorTheme; label: string; description: string }[] = [
   { value: "charcoal", label: "Charcoal", description: "Warm graphite" },
 ];
 
+const fonts: { value: AppFont; label: string }[] = [
+  { value: "system", label: "System Sans" },
+  { value: "modern", label: "Modern Sans" },
+  { value: "accessible", label: "Accessible" },
+  { value: "serif", label: "Classic Serif" },
+  { value: "monospace", label: "Monospace" },
+];
+
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const {
     theme,
+    appFont,
     pdfOrientation,
     shortcuts,
     setTheme,
+    setAppFont,
     setPdfOrientation,
     setShortcut,
     resetShortcut,
@@ -142,6 +152,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <small>{option.description}</small>
                 </button>
               ))}
+            </div>
+            <div className="font-setting settings-row">
+              <div>
+                <h3>Application font</h3>
+                <p>Applied throughout the interface, editor, and preview.</p>
+              </div>
+              <select
+                value={appFont}
+                onChange={(event) => setAppFont(event.target.value as AppFont)}
+                aria-label="Application font"
+              >
+                {fonts.map((font) => (
+                  <option key={font.value} value={font.value}>
+                    {font.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </section>
 

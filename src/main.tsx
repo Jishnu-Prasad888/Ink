@@ -5,6 +5,7 @@ import { useSettingsStore } from "./store/settingsStore";
 import "./styles/globals.css";
 
 document.documentElement.dataset.theme = useSettingsStore.getState().theme;
+document.documentElement.dataset.font = useSettingsStore.getState().appFont;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

@@ -303,7 +303,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
-  const { theme, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
+  const { theme, appFont, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
   const { recentFiles, addRecentFile, removeRecentFile, clearRecentFiles } = useRecentFilesStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [exportTabId, setExportTabId] = useState<string | null>(null);
@@ -329,6 +329,10 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.font = appFont;
+  }, [appFont]);
 
   useEffect(() => {
     [...initialSessionFiles.current]
