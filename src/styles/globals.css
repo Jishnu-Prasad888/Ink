@@ -1007,6 +1007,7 @@
   background: var(--surface-raised);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .pdf-toolbar button {
@@ -1037,6 +1038,17 @@
   text-align: center;
 }
 
+.pdf-toolbar .pdf-zoom-value {
+  min-width: 48px;
+}
+
+.pdf-toolbar-divider {
+  width: 1px;
+  min-width: 1px !important;
+  height: 20px;
+  background: var(--border);
+}
+
 .pdf-document {
   flex: 1;
   overflow: auto;
@@ -1048,7 +1060,7 @@
 }
 
 .pdf-document canvas {
-  max-width: 100%;
+  max-width: none;
   height: auto;
   border: 1px solid var(--border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);

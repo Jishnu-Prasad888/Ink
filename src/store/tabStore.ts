@@ -17,7 +17,9 @@ export interface Tab {
   cursorPosition?: number;
   scrollPosition?: number;
   previewScrollPosition?: number;
-  pdfBlobUrl?: string; // for PDF rendering
+  pdfPage?: number;
+  pdfZoom?: number;
+  pdfRotation?: 0 | 90 | 180 | 270;
 }
 
 // Represents one "panel slot" in the split-file view
@@ -365,7 +367,6 @@ export const useTabStore = create<TabStore>()(
         tabs: state.tabs.map((tab) => ({
           ...tab,
           content: tab.type === "markdown" ? tab.content : null,
-          pdfBlobUrl: undefined,
         })),
         activeTabId: state.activeTabId,
         splitLayout: {

@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { invoke } from "@tauri-apps/api/core";
-import { Tab } from "../store/tabStore";
+import { Tab, useTabStore } from "../store/tabStore";
 
 // ✅ FIX 1: Import required CSS — without these, pages 2+ lose canvas rendering
 // and fall back to raw text layer only
@@ -19,11 +19,14 @@ interface PdfViewerProps {
 export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
+  const [pageNumber, setPageNumber] = useState(tab.pdfPage ?? 1);
+  const [zoom, setZoom] = useState(tab.pdfZoom ?? 1);
+  const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(tab.pdfRotation ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pageWidth, setPageWidth] = useState(720);
   const documentRef = useRef<HTMLDivElement>(null);
+  const updateTab = useTabStore((state) => state.updateTab);
 
   useEffect(() => {
     const container = documentRef.current;
@@ -51,7 +54,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
         setError(null);
         setBlobUrl(null);
         setNumPages(null);
-        setPageNumber(1);
 
         const bytes: Uint8Array | number[] = await invoke("read_file_binary", {
           path: tab.filePath,
@@ -91,6 +93,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
+    const clampedPage = Math.max(1, Math.min(pageNumber, numPages));
+    if (clampedPage !== pageNumber) {
+      setPageNumber(clampedPage);
+      updateTab(tab.id, { pdfPage: clampedPage });
+    }
   };
 
   const onDocumentLoadError = (error: Error) => {
@@ -118,20 +125,55 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
     );
   }
 
+  const changePage = (nextPage: number) => {
+    const clampedPage = Math.max(1, Math.min(nextPage, numPages ?? 1));
+    setPageNumber(clampedPage);
+    updateTab(tab.id, { pdfPage: clampedPage });
+  };
+
+  const changeZoom = (nextZoom: number) => {
+    const clampedZoom = Math.max(0.5, Math.min(nextZoom, 3));
+    setZoom(clampedZoom);
+    updateTab(tab.id, { pdfZoom: clampedZoom });
+  };
+
+  const rotate = (direction: -1 | 1) => {
+    const nextRotation = ((rotation + direction * 90 + 360) % 360) as 0 | 90 | 180 | 270;
+    setRotation(nextRotation);
+    updateTab(tab.id, { pdfRotation: nextRotation });
+  };
+
   return (
     <div className="pdf-viewer" aria-busy={loading}>
       <div className="pdf-toolbar" role="toolbar" aria-label="PDF navigation">
-        <button disabled={pageNumber <= 1} onClick={() => setPageNumber(pageNumber - 1)}>
+        <button disabled={pageNumber <= 1} onClick={() => changePage(pageNumber - 1)}>
           ← Previous
         </button>
         <span>
           Page {pageNumber} of {numPages || "?"}
         </span>
-        <button
-          disabled={pageNumber >= (numPages || 1)}
-          onClick={() => setPageNumber(pageNumber + 1)}
-        >
+        <button disabled={pageNumber >= (numPages || 1)} onClick={() => changePage(pageNumber + 1)}>
           Next →
+        </button>
+        <span className="pdf-toolbar-divider" aria-hidden="true" />
+        <button
+          onClick={() => changeZoom(zoom - 0.25)}
+          disabled={zoom <= 0.5}
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        <span className="pdf-zoom-value">{Math.round(zoom * 100)}%</span>
+        <button onClick={() => changeZoom(zoom + 0.25)} disabled={zoom >= 3} aria-label="Zoom in">
+          +
+        </button>
+        <button onClick={() => changeZoom(1)}>Fit width</button>
+        <span className="pdf-toolbar-divider" aria-hidden="true" />
+        <button onClick={() => rotate(-1)} aria-label="Rotate counterclockwise">
+          ↶ Rotate
+        </button>
+        <button onClick={() => rotate(1)} aria-label="Rotate clockwise">
+          Rotate ↷
         </button>
       </div>
       <div ref={documentRef} className="pdf-document">
@@ -146,9 +188,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
           {/* ✅ FIX 3: Explicit renderTextLayer + renderAnnotationLayer keeps
               rendering consistent across all pages */}
           <Page
-            key={pageNumber}
+            key={`${pageNumber}-${rotation}`}
             pageNumber={pageNumber}
-            width={pageWidth}
+            width={pageWidth * zoom}
+            rotate={rotation}
             renderTextLayer={true}
             renderAnnotationLayer={true}
           />
