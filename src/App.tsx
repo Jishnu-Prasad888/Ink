@@ -7,7 +7,10 @@ import { Sidebar } from "./components/Sidebar";
 import { PdfViewer } from "./components/PdfViewer";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import { Tab } from "./components/Tab";
+import { SettingsModal } from "./components/SettingsModal";
 import { useTabStore } from "./store/tabStore";
+import { useSettingsStore } from "./store/settingsStore";
+import { formatShortcut, matchesShortcut } from "./utils/shortcuts";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -27,8 +30,6 @@ interface PendingClose {
   tabIds: string[];
   closeWindow: boolean;
 }
-
-type Theme = "light" | "dark" | "system";
 
 const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
@@ -86,6 +87,17 @@ const Icon = {
   CloseSplit: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
+  Settings: () => (
+    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M7 1.5v1.2M7 11.3v1.2M1.5 7h1.2M11.3 7h1.2M3.1 3.1l.9.9M10 10l.9.9M10.9 3.1l-.9.9M4 10l-.9.9"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   ),
 };
@@ -223,9 +235,8 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem("ink-theme") as Theme | null) ?? "system",
-  );
+  const { theme, shortcuts } = useSettingsStore();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
@@ -240,7 +251,6 @@ function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("ink-theme", theme);
   }, [theme]);
 
   // ── File operations ──────────────────────────────────────────────────────
@@ -491,50 +501,56 @@ function App() {
   // ── Keyboard shortcuts (single listener, stable) ──────────────────────────
   useEffect(() => {
     const onKeyDown = async (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-      const key = e.key.toLowerCase();
+      if (e.isComposing) return;
+      if (matchesShortcut(e, shortcuts["app.settings"])) {
+        e.preventDefault();
+        setSettingsOpen((open) => !open);
+        return;
+      }
+      if (settingsOpen) return;
 
-      if (ctrl && e.shiftKey && key === "p") {
+      if (matchesShortcut(e, shortcuts["app.commandPalette"])) {
         e.preventDefault();
         setCommandPaletteOpen((open) => !open);
         setCommandQuery("");
         setCommandIndex(0);
         return;
       }
-      if (ctrl && key === "b") {
+      if (matchesShortcut(e, shortcuts["view.toggleExplorer"])) {
         e.preventDefault();
         setSidebarOpen((open) => !open);
         return;
       }
-
-      // Ctrl+S / Ctrl+Shift+S
-      if (ctrl && key === "s") {
+      if (matchesShortcut(e, shortcuts["file.saveAs"])) {
         e.preventDefault();
-        if (e.shiftKey) await handleSaveAsRef.current();
-        else await handleSaveFileRef.current();
+        await handleSaveAsRef.current();
         return;
       }
-      // Ctrl+O
-      if (ctrl && key === "o") {
+      if (matchesShortcut(e, shortcuts["file.save"])) {
+        e.preventDefault();
+        await handleSaveFileRef.current();
+        return;
+      }
+      if (matchesShortcut(e, shortcuts["file.open"])) {
         e.preventDefault();
         await handleOpenFileRef.current();
         return;
       }
-      // Ctrl+N
-      if (ctrl && key === "n") {
+      if (matchesShortcut(e, shortcuts["file.new"])) {
         e.preventDefault();
         handleNewFileRef.current();
         return;
       }
-      // Ctrl+W
-      if (ctrl && key === "w") {
+      if (matchesShortcut(e, shortcuts["file.close"])) {
         e.preventDefault();
         const { activeTabId: aid } = useTabStore.getState();
         if (aid) requestCloseRef.current([aid]);
         return;
       }
-      // Ctrl+Tab — cycle tabs
-      if (ctrl && e.key === "Tab") {
+      if (
+        matchesShortcut(e, shortcuts["tabs.next"]) ||
+        matchesShortcut(e, shortcuts["tabs.previous"])
+      ) {
         e.preventDefault();
         const { tabs: t, activeTabId: aid, splitLayout: layout } = useTabStore.getState();
         const availableTabs = layout.enabled
@@ -542,41 +558,37 @@ function App() {
           : t;
         if (availableTabs.length > 1 && aid) {
           const idx = availableTabs.findIndex((x) => x.id === aid);
-          const next = (idx + (e.shiftKey ? -1 : 1) + availableTabs.length) % availableTabs.length;
+          const direction = matchesShortcut(e, shortcuts["tabs.previous"]) ? -1 : 1;
+          const next = (idx + direction + availableTabs.length) % availableTabs.length;
           setActiveTab(availableTabs[next].id);
         }
         return;
       }
-      // Ctrl+Shift+T — reopen last closed
-      if (ctrl && e.shiftKey && key === "t") {
+      if (matchesShortcut(e, shortcuts["tabs.reopen"])) {
         e.preventDefault();
         reopenLastClosed();
         return;
       }
 
-      // Ctrl+1/2/3 — mode switching for active tab
-      if (ctrl && !e.shiftKey) {
+      const requestedMode = matchesShortcut(e, shortcuts["view.edit"])
+        ? "edit"
+        : matchesShortcut(e, shortcuts["view.sidePreview"])
+          ? "split"
+          : matchesShortcut(e, shortcuts["view.preview"])
+            ? "view"
+            : null;
+      if (requestedMode) {
         const { activeTabId: aid, tabs: t, updateTab: ut } = useTabStore.getState();
         const tab = t.find((x) => x.id === aid);
         if (!tab) return;
-        if (e.key === "1") {
-          e.preventDefault();
-          ut(tab.id, { mode: "edit" });
-        }
-        if (e.key === "2") {
-          e.preventDefault();
-          ut(tab.id, { mode: "split" });
-        }
-        if (e.key === "3") {
-          e.preventDefault();
-          ut(tab.id, { mode: "view" });
-        }
+        e.preventDefault();
+        ut(tab.id, { mode: requestedMode });
       }
     };
 
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [reopenLastClosed, setActiveTab]);
+  }, [reopenLastClosed, setActiveTab, settingsOpen, shortcuts]);
 
   // ── Drag & drop ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -701,20 +713,56 @@ function App() {
   };
 
   const commands = [
-    { label: "File: New Document", shortcut: "Ctrl+N", run: handleNewFile },
-    { label: "File: Open Document", shortcut: "Ctrl+O", run: () => void handleOpenFile() },
-    { label: "File: Save", shortcut: "Ctrl+S", run: () => void handleSaveFile() },
+    {
+      label: "File: New Document",
+      shortcut: formatShortcut(shortcuts["file.new"]),
+      run: handleNewFile,
+    },
+    {
+      label: "File: Open Document",
+      shortcut: formatShortcut(shortcuts["file.open"]),
+      run: () => void handleOpenFile(),
+    },
+    {
+      label: "File: Save",
+      shortcut: formatShortcut(shortcuts["file.save"]),
+      run: () => void handleSaveFile(),
+    },
+    {
+      label: "File: Save As",
+      shortcut: formatShortcut(shortcuts["file.saveAs"]),
+      run: () => void handleSaveAs(),
+    },
+    {
+      label: "File: Close Tab",
+      shortcut: formatShortcut(shortcuts["file.close"]),
+      run: () => activeTabId && requestClose([activeTabId]),
+    },
     {
       label: sidebarOpen ? "View: Hide Explorer" : "View: Show Explorer",
-      shortcut: "Ctrl+B",
+      shortcut: formatShortcut(shortcuts["view.toggleExplorer"]),
       run: () => setSidebarOpen((open) => !open),
     },
-    { label: "View: Edit", shortcut: "Ctrl+1", run: () => handleModeChange("edit") },
-    { label: "View: Preview to Side", shortcut: "Ctrl+2", run: () => handleModeChange("split") },
-    { label: "View: Preview", shortcut: "Ctrl+3", run: () => handleModeChange("view") },
-    { label: "Theme: Light", shortcut: "", run: () => setTheme("light") },
-    { label: "Theme: Dark", shortcut: "", run: () => setTheme("dark") },
-    { label: "Theme: Use System", shortcut: "", run: () => setTheme("system") },
+    {
+      label: "View: Edit",
+      shortcut: formatShortcut(shortcuts["view.edit"]),
+      run: () => handleModeChange("edit"),
+    },
+    {
+      label: "View: Preview to Side",
+      shortcut: formatShortcut(shortcuts["view.sidePreview"]),
+      run: () => handleModeChange("split"),
+    },
+    {
+      label: "View: Preview",
+      shortcut: formatShortcut(shortcuts["view.preview"]),
+      run: () => handleModeChange("view"),
+    },
+    {
+      label: "Application: Settings",
+      shortcut: formatShortcut(shortcuts["app.settings"]),
+      run: () => setSettingsOpen(true),
+    },
   ];
   const visibleCommands = commands.filter((command) =>
     command.label.toLowerCase().includes(commandQuery.trim().toLowerCase()),
@@ -833,17 +881,12 @@ function App() {
             Commands
           </button>
           <button
-            className="toolbar-btn theme-button"
-            onClick={() =>
-              setTheme((current) =>
-                current === "light" ? "dark" : current === "dark" ? "system" : "light",
-              )
-            }
-            title="Cycle color theme"
+            className="toolbar-btn settings-button"
+            onClick={() => setSettingsOpen(true)}
+            title={`Settings (${formatShortcut(shortcuts["app.settings"])})`}
+            aria-label="Open settings"
           >
-            {theme === "system"
-              ? "System theme"
-              : `${theme[0].toUpperCase()}${theme.slice(1)} theme`}
+            <Icon.Settings /> Settings
           </button>
         </div>
 
@@ -908,6 +951,8 @@ function App() {
           <div className="drag-overlay-inner">Drop .md files to open</div>
         </div>
       )}
+
+      {settingsOpen && <SettingsModal isOpen onClose={() => setSettingsOpen(false)} />}
 
       {commandPaletteOpen && (
         <div
