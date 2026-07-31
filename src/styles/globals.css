@@ -780,6 +780,13 @@
   gap: 3px;
 }
 
+.recent-files-empty {
+  padding: 14px 8px 16px;
+  color: var(--text-muted) !important;
+  font-size: 11.5px !important;
+  text-align: center;
+}
+
 .recent-file {
   display: grid;
   width: 100%;

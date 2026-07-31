@@ -313,6 +313,11 @@ function App() {
   const [commandIndex, setCommandIndex] = useState(0);
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const exportTab = tabs.find((tab) => tab.id === exportTabId && tab.type === "markdown");
+  const initialSessionFiles = useRef(
+    [activeTab, ...tabs.filter((tab) => tab.id !== activeTabId)]
+      .filter((tab): tab is NonNullable<typeof tab> => Boolean(tab?.filePath))
+      .map((tab) => ({ path: tab.filePath!, fileName: tab.fileName })),
+  );
 
   // Keep stable refs to handlers so keyboard shortcuts always see current state
   const handleSaveFileRef = useRef<() => Promise<void>>(async () => {});
@@ -324,6 +329,12 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    [...initialSessionFiles.current]
+      .reverse()
+      .forEach((file) => addRecentFile(file.path, file.fileName));
+  }, [addRecentFile]);
 
   // ── File operations ──────────────────────────────────────────────────────
 
@@ -815,12 +826,12 @@ function App() {
               Open file
             </button>
           </div>
-          {recentFiles.length > 0 && (
-            <section className="recent-files" aria-labelledby="recent-files-title">
-              <div className="recent-files-header">
-                <h3 id="recent-files-title">Recent</h3>
-                <button onClick={clearRecentFiles}>Clear</button>
-              </div>
+          <section className="recent-files" aria-labelledby="recent-files-title">
+            <div className="recent-files-header">
+              <h3 id="recent-files-title">Recent</h3>
+              {recentFiles.length > 0 && <button onClick={clearRecentFiles}>Clear</button>}
+            </div>
+            {recentFiles.length > 0 ? (
               <div className="recent-files-list">
                 {recentFiles.slice(0, 5).map((file) => (
                   <button
@@ -844,8 +855,10 @@ function App() {
                   </button>
                 ))}
               </div>
-            </section>
-          )}
+            ) : (
+              <p className="recent-files-empty">Files you open will appear here.</p>
+            )}
+          </section>
         </div>
       );
     }
