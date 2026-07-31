@@ -1,9 +1,19 @@
 // components/Sidebar.tsx
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useTabStore } from "../store/tabStore";
-import { FileIcon, FolderIcon, FolderPlusIcon, PlusIcon, TrashIcon } from "./Icons";
+import {
+  ChevronIcon,
+  CloseFolderIcon,
+  FileIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  PlusIcon,
+  RefreshIcon,
+  TrashIcon,
+} from "./Icons";
 
 interface FileNode {
   name: string;
@@ -24,7 +34,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
   );
   const [tree, setTree] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const requestGeneration = useRef(0);
   const addTab = useTabStore((state) => state.addTab);
+  const activeFilePath = useTabStore(
+    (state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.filePath,
+  );
 
   const buildTree = useCallback(
     async (folderPath: string): Promise<FileNode[]> => {
@@ -51,11 +65,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
 
   const loadTree = useCallback(
     async (folderPath: string) => {
+      const generation = ++requestGeneration.current;
       try {
-        setTree(await buildTree(folderPath));
+        const nodes = await buildTree(folderPath);
+        if (generation !== requestGeneration.current) return;
+        setTree(nodes);
         setRootFolder(folderPath);
         localStorage.setItem("sidebar-root-folder", folderPath);
       } catch (error) {
+        if (generation !== requestGeneration.current) return;
         console.error("Failed to load folder:", error);
         onError(`Could not load folder: ${String(error)}`);
       }
@@ -65,26 +83,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
 
   useEffect(() => {
     if (!rootFolder) return;
-    let cancelled = false;
+    const generation = ++requestGeneration.current;
     buildTree(rootFolder)
       .then((nodes) => {
-        if (!cancelled) setTree(nodes);
+        if (generation === requestGeneration.current) setTree(nodes);
       })
       .catch((error) => {
-        if (!cancelled) onError(`Could not refresh folder: ${String(error)}`);
+        if (generation === requestGeneration.current) {
+          onError(`Could not refresh folder: ${String(error)}`);
+        }
       });
     return () => {
-      cancelled = true;
+      if (generation === requestGeneration.current) requestGeneration.current += 1;
     };
   }, [buildTree, onError, rootFolder]);
 
   const handleOpenFolder = async () => {
     try {
       const selected: string[] = await invoke("open_folder_dialog");
-      if (selected.length > 0) await loadTree(selected[0]);
+      if (selected.length > 0) {
+        setExpanded(new Set());
+        await loadTree(selected[0]);
+      }
     } catch (error) {
       onError(`Could not open folder: ${String(error)}`);
     }
+  };
+
+  const handleCloseFolder = () => {
+    requestGeneration.current += 1;
+    setRootFolder(null);
+    setTree([]);
+    setExpanded(new Set());
+    localStorage.removeItem("sidebar-root-folder");
   };
 
   const toggleExpand = (path: string) => {
@@ -168,81 +199,104 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
   };
 
   const renderTree = (nodes: FileNode[], level = 0) => {
-    return nodes.map((node) => (
-      <ContextMenu.Root key={node.path}>
-        <ContextMenu.Trigger asChild>
-          <div
-            className="sidebar-item"
-            role="treeitem"
-            tabIndex={0}
-            aria-expanded={node.is_dir ? expanded.has(node.path) : undefined}
-            aria-level={level + 1}
-            style={{ paddingLeft: `${level * 16 + 12}px` }}
-            onClick={() => (node.is_dir ? toggleExpand(node.path) : handleFileClick(node))}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                if (node.is_dir) toggleExpand(node.path);
-                else void handleFileClick(node);
-              } else if (event.key === "ArrowRight" && node.is_dir) {
-                event.preventDefault();
-                if (!expanded.has(node.path)) toggleExpand(node.path);
-              } else if (event.key === "ArrowLeft" && node.is_dir) {
-                event.preventDefault();
-                if (expanded.has(node.path)) toggleExpand(node.path);
-              }
-            }}
-          >
-            {node.is_dir ? (
-              <span className="sidebar-icon">
-                <FolderIcon />
-              </span>
-            ) : (
-              <span className="sidebar-icon">
-                <FileIcon />
-              </span>
-            )}
-            <span className="sidebar-name">{node.name}</span>
-          </div>
-        </ContextMenu.Trigger>
-        {node.is_dir && expanded.has(node.path) && node.children && (
-          <div className="sidebar-children">{renderTree(node.children, level + 1)}</div>
-        )}
-        <ContextMenu.Portal>
-          <ContextMenu.Content className="context-menu-content">
-            {node.is_dir && (
-              <>
-                <ContextMenu.Item
-                  className="context-menu-item"
-                  onSelect={() => {
-                    const newName = prompt("Enter file name (without extension)");
-                    if (newName) void handleCreateFile(node.path, newName);
-                  }}
-                >
-                  <PlusIcon /> New File
-                </ContextMenu.Item>
-                <ContextMenu.Item
-                  className="context-menu-item"
-                  onSelect={() => {
-                    const newName = prompt("Enter folder name");
-                    if (newName) void handleCreateFolder(node.path, newName);
-                  }}
-                >
-                  <FolderPlusIcon /> New Folder
-                </ContextMenu.Item>
-                <ContextMenu.Separator className="context-menu-separator" />
-              </>
-            )}
-            <ContextMenu.Item
-              className="context-menu-item destructive"
-              onSelect={() => handleDelete(node.path)}
+    return nodes.map((node) => {
+      const isExpanded = node.is_dir && expanded.has(node.path);
+      const isSelected = !node.is_dir && activeFilePath === node.path;
+      return (
+        <ContextMenu.Root key={node.path}>
+          <ContextMenu.Trigger asChild>
+            <div
+              className={`sidebar-item${isSelected ? " sidebar-item--selected" : ""}`}
+              role="treeitem"
+              tabIndex={0}
+              aria-expanded={node.is_dir ? isExpanded : undefined}
+              aria-selected={isSelected}
+              aria-level={level + 1}
+              title={node.path}
+              style={{ paddingLeft: `${level * 16 + 12}px` }}
+              onClick={() => (node.is_dir ? toggleExpand(node.path) : handleFileClick(node))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  if (node.is_dir) toggleExpand(node.path);
+                  else void handleFileClick(node);
+                } else if (event.key === "ArrowRight" && node.is_dir) {
+                  event.preventDefault();
+                  if (!isExpanded) toggleExpand(node.path);
+                } else if (event.key === "ArrowLeft" && node.is_dir) {
+                  event.preventDefault();
+                  if (isExpanded) toggleExpand(node.path);
+                }
+              }}
             >
-              <TrashIcon /> Delete
-            </ContextMenu.Item>
-          </ContextMenu.Content>
-        </ContextMenu.Portal>
-      </ContextMenu.Root>
-    ));
+              <span
+                className={`sidebar-disclosure${isExpanded ? " sidebar-disclosure--expanded" : ""}`}
+                aria-hidden="true"
+              >
+                {node.is_dir && <ChevronIcon />}
+              </span>
+              {node.is_dir ? (
+                <span className="sidebar-icon">
+                  {isExpanded ? <FolderOpenIcon /> : <FolderIcon />}
+                </span>
+              ) : (
+                <span className="sidebar-icon">
+                  <FileIcon />
+                </span>
+              )}
+              <span className="sidebar-name">{node.name}</span>
+            </div>
+          </ContextMenu.Trigger>
+          {isExpanded && node.children && (
+            <div className="sidebar-children" role="group">
+              {node.children.length > 0 ? (
+                renderTree(node.children, level + 1)
+              ) : (
+                <div
+                  className="sidebar-empty-folder"
+                  style={{ paddingLeft: `${(level + 1) * 16 + 28}px` }}
+                >
+                  Empty folder
+                </div>
+              )}
+            </div>
+          )}
+          <ContextMenu.Portal>
+            <ContextMenu.Content className="context-menu-content">
+              {node.is_dir && (
+                <>
+                  <ContextMenu.Item
+                    className="context-menu-item"
+                    onSelect={() => {
+                      const newName = prompt("Enter file name (without extension)");
+                      if (newName) void handleCreateFile(node.path, newName);
+                    }}
+                  >
+                    <PlusIcon /> New File
+                  </ContextMenu.Item>
+                  <ContextMenu.Item
+                    className="context-menu-item"
+                    onSelect={() => {
+                      const newName = prompt("Enter folder name");
+                      if (newName) void handleCreateFolder(node.path, newName);
+                    }}
+                  >
+                    <FolderPlusIcon /> New Folder
+                  </ContextMenu.Item>
+                  <ContextMenu.Separator className="context-menu-separator" />
+                </>
+              )}
+              <ContextMenu.Item
+                className="context-menu-item destructive"
+                onSelect={() => handleDelete(node.path)}
+              >
+                <TrashIcon /> Delete
+              </ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu.Portal>
+        </ContextMenu.Root>
+      );
+    });
   };
 
   if (!isOpen) return null;
@@ -296,7 +350,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
               aria-label="Refresh Explorer"
               onClick={() => void loadTree(rootFolder)}
             >
-              ↻
+              <RefreshIcon />
+            </button>
+            <button
+              className="sidebar-icon-btn sidebar-close-folder"
+              title="Close folder"
+              aria-label="Close folder"
+              onClick={handleCloseFolder}
+            >
+              <CloseFolderIcon />
             </button>
           </>
         )}

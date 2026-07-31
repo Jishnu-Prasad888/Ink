@@ -344,7 +344,8 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
             a["name"]
                 .as_str()
                 .unwrap_or("")
-                .cmp(b["name"].as_str().unwrap_or(""))
+                .to_lowercase()
+                .cmp(&b["name"].as_str().unwrap_or("").to_lowercase())
         }
     });
     Ok(result)
