@@ -1750,6 +1750,118 @@
   font-family: var(--font-ui);
 }
 
+/* ── PDF export ──────────────────────────────────────────── */
+
+.export-dialog {
+  width: min(480px, 100%);
+  padding: 24px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 32%);
+}
+
+.export-dialog h2 {
+  margin-bottom: 5px;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.export-dialog > p {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.orientation-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.orientation-options button {
+  display: flex;
+  min-height: 112px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.orientation-options button:hover,
+.orientation-options button.active {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.page-shape {
+  display: block;
+  background: var(--surface);
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 14%);
+}
+
+.page-shape--portrait {
+  width: 38px;
+  height: 52px;
+}
+
+.page-shape--landscape {
+  width: 52px;
+  height: 38px;
+}
+
+.print-root {
+  position: fixed;
+  left: -100000px;
+  width: 210mm;
+  padding: 0;
+  color: #202124;
+  visibility: hidden;
+  background: #fff;
+}
+
+@media print {
+  .print-root {
+    position: static;
+    left: auto;
+    display: block;
+    width: auto;
+    max-width: none;
+    color: #202124;
+    visibility: visible;
+    background: #fff;
+  }
+
+  .print-root :is(h1, h2, h3, h4, h5, h6, p, li, td, th, strong, blockquote) {
+    color: #202124;
+  }
+
+  .print-root :is(pre, table, img, svg, .katex-display) {
+    break-inside: avoid;
+  }
+
+  .print-root h1,
+  .print-root h2,
+  .print-root h3 {
+    break-after: avoid;
+  }
+
+  .print-root pre {
+    overflow: visible;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (max-width: 900px) {
   .toolbar {
     padding-inline: 8px;

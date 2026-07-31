@@ -8,9 +8,11 @@ import { PdfViewer } from "./components/PdfViewer";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import { Tab } from "./components/Tab";
 import { SettingsModal } from "./components/SettingsModal";
+import { ExportPdfModal } from "./components/ExportPdfModal";
 import { useTabStore } from "./store/tabStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { formatShortcut, matchesShortcut } from "./utils/shortcuts";
+import { exportMarkdownToPdf } from "./utils/pdfExport";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -300,8 +302,10 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
-  const { theme, shortcuts } = useSettingsStore();
+  const { theme, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
@@ -484,6 +488,26 @@ function App() {
     if (freshTab) await saveTab(freshTab.id, true);
   }, [saveTab]);
 
+  const handleExportPdf = useCallback(async () => {
+    const tab = useTabStore
+      .getState()
+      .tabs.find((item) => item.id === useTabStore.getState().activeTabId);
+    if (!tab || tab.type !== "markdown" || tab.content === null) return;
+    setIsExporting(true);
+    try {
+      await exportMarkdownToPdf(
+        tab.content,
+        tab.fileName,
+        useSettingsStore.getState().pdfOrientation,
+      );
+      setExportDialogOpen(false);
+    } catch (error) {
+      showToast(`Could not export ${tab.fileName}: ${String(error)}`);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [showToast]);
+
   const requestClose = useCallback(
     (tabIds: string[], closeWindow = false) => {
       const dirtyTabs = useTabStore
@@ -610,6 +634,14 @@ function App() {
         e.preventDefault();
         const { activeTabId: aid } = useTabStore.getState();
         if (aid) requestCloseRef.current([aid]);
+        return;
+      }
+      if (matchesShortcut(e, shortcuts["file.exportPdf"])) {
+        e.preventDefault();
+        const tab = useTabStore
+          .getState()
+          .tabs.find((item) => item.id === useTabStore.getState().activeTabId);
+        if (tab?.type === "markdown") setExportDialogOpen(true);
         return;
       }
       if (
@@ -819,6 +851,11 @@ function App() {
       run: () => activeTabId && requestClose([activeTabId]),
     },
     {
+      label: "File: Export PDF",
+      shortcut: formatShortcut(shortcuts["file.exportPdf"]),
+      run: () => activeTab?.type === "markdown" && setExportDialogOpen(true),
+    },
+    {
       label: sidebarOpen ? "View: Hide Explorer" : "View: Show Explorer",
       shortcut: formatShortcut(shortcuts["view.toggleExplorer"]),
       run: () => setSidebarOpen((open) => !open),
@@ -900,6 +937,14 @@ function App() {
             disabled={!activeTab || activeTab.type !== "markdown"}
           >
             Save as
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={() => setExportDialogOpen(true)}
+            title={`Export PDF (${formatShortcut(shortcuts["file.exportPdf"])})`}
+            disabled={!activeTab || activeTab.type !== "markdown"}
+          >
+            Export PDF
           </button>
           <div className="toolbar-divider" />
 
@@ -1041,6 +1086,17 @@ function App() {
       )}
 
       {settingsOpen && <SettingsModal isOpen onClose={() => setSettingsOpen(false)} />}
+
+      {exportDialogOpen && activeTab?.type === "markdown" && (
+        <ExportPdfModal
+          fileName={activeTab.fileName}
+          orientation={pdfOrientation}
+          isExporting={isExporting}
+          onOrientationChange={setPdfOrientation}
+          onCancel={() => setExportDialogOpen(false)}
+          onExport={() => void handleExportPdf()}
+        />
+      )}
 
       {commandPaletteOpen && (
         <div

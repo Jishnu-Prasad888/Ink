@@ -17,6 +17,7 @@ export const shortcutDefinitions = [
   { id: "file.save", label: "Save", group: "Files", defaultKey: "Mod+S" },
   { id: "file.saveAs", label: "Save as", group: "Files", defaultKey: "Mod+Shift+S" },
   { id: "file.close", label: "Close tab", group: "Files", defaultKey: "Mod+W" },
+  { id: "file.exportPdf", label: "Export PDF", group: "Files", defaultKey: "Mod+Shift+E" },
   { id: "tabs.reopen", label: "Reopen closed tab", group: "Tabs", defaultKey: "Mod+Shift+T" },
   { id: "tabs.next", label: "Next tab", group: "Tabs", defaultKey: "Mod+Tab" },
   { id: "tabs.previous", label: "Previous tab", group: "Tabs", defaultKey: "Mod+Shift+Tab" },
