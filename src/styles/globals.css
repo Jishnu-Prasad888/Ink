@@ -1292,6 +1292,56 @@ textarea {
   white-space: nowrap;
 }
 
+.status-document {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-metrics {
+  margin-left: auto;
+}
+
+.status-zoom {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.status-zoom button {
+  display: grid;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  place-items: center;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font: 11px var(--font-ui);
+  cursor: pointer;
+}
+
+.status-zoom button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.status-zoom button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.status-zoom .status-zoom-reset {
+  min-width: 78px;
+}
+
 /* ── PDF Viewer ──────────────────────────────────────────── */
 
 .pdf-viewer {
@@ -2320,6 +2370,10 @@ textarea {
   .status-bar span:first-child {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .status-metrics {
+    display: none;
   }
 
   .main-layout {

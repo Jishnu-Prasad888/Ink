@@ -38,6 +38,23 @@ const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
 };
 
+const changeDocumentZoom = (tabId: string, direction: -1 | 0 | 1) => {
+  const { tabs, updateTab } = useTabStore.getState();
+  const tab = tabs.find((item) => item.id === tabId);
+  if (!tab) return;
+  const isPdf = tab.type === "pdf";
+  const currentZoom = isPdf ? (tab.pdfZoom ?? 1) : (tab.documentZoom ?? 1);
+  const rawZoom =
+    direction === 0
+      ? 1
+      : Math.max(
+          isPdf ? 0.5 : 0.6,
+          Math.min(isPdf ? 3 : 2, currentZoom + direction * (isPdf ? 0.25 : 0.1)),
+        );
+  const nextZoom = Math.round(rawZoom * 100) / 100;
+  updateTab(tab.id, isPdf ? { pdfZoom: nextZoom } : { documentZoom: nextZoom });
+};
+
 const Icon = {
   New: () => (
     <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -339,6 +356,18 @@ function App() {
       .reverse()
       .forEach((file) => addRecentFile(file.path, file.fileName));
   }, [addRecentFile]);
+
+  useEffect(() => {
+    const contentArea = document.getElementById("editor-content");
+    if (!contentArea) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || !activeTabId || !contentArea.contains(event.target as Node)) return;
+      event.preventDefault();
+      changeDocumentZoom(activeTabId, event.deltaY < 0 ? 1 : -1);
+    };
+    contentArea.addEventListener("wheel", handleWheel, { passive: false });
+    return () => contentArea.removeEventListener("wheel", handleWheel);
+  }, [activeTabId]);
 
   // ── File operations ──────────────────────────────────────────────────────
 
@@ -973,6 +1002,13 @@ function App() {
   const line = beforeCursor.split("\n").length;
   const column = cursorPosition - beforeCursor.lastIndexOf("\n");
   const wordCount = activeContent.trim() ? activeContent.trim().split(/\s+/).length : 0;
+  const activeZoom = activeTab
+    ? activeTab.type === "pdf"
+      ? (activeTab.pdfZoom ?? 1)
+      : (activeTab.documentZoom ?? 1)
+    : 1;
+  const minimumZoom = activeTab?.type === "pdf" ? 0.5 : 0.6;
+  const maximumZoom = activeTab?.type === "pdf" ? 3 : 2;
 
   return (
     <div className="app-container">
@@ -1136,15 +1172,47 @@ function App() {
       </main>
 
       <footer className="status-bar" aria-label="Document status">
-        <span>
+        <span className="status-document">
           {activeTab
             ? `${activeTab.fileName}${activeTab.isDirty ? " - Unsaved" : " - Saved"}`
             : "No document open"}
         </span>
         {activeTab?.type === "markdown" && (
-          <span>
+          <span className="status-metrics">
             Ln {line}, Col {column} | {wordCount} words | Markdown
           </span>
+        )}
+        {activeTab && (
+          <div
+            className="status-zoom"
+            role="group"
+            aria-label={`Document zoom ${Math.round(activeZoom * 100)} percent`}
+          >
+            <button
+              onClick={() => changeDocumentZoom(activeTab.id, -1)}
+              disabled={activeZoom <= minimumZoom}
+              title="Zoom out"
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <button
+              className="status-zoom-reset"
+              onClick={() => changeDocumentZoom(activeTab.id, 0)}
+              disabled={activeZoom === 1}
+              title="Reset zoom"
+            >
+              Reset {Math.round(activeZoom * 100)}%
+            </button>
+            <button
+              onClick={() => changeDocumentZoom(activeTab.id, 1)}
+              disabled={activeZoom >= maximumZoom}
+              title="Zoom in"
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+          </div>
         )}
       </footer>
 

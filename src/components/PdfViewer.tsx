@@ -20,7 +20,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(tab.pdfPage ?? 1);
-  const [zoom, setZoom] = useState(tab.pdfZoom ?? 1);
+  const zoom = tab.pdfZoom ?? 1;
   const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(tab.pdfRotation ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,7 +133,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
 
   const changeZoom = (nextZoom: number) => {
     const clampedZoom = Math.max(0.5, Math.min(nextZoom, 3));
-    setZoom(clampedZoom);
     updateTab(tab.id, { pdfZoom: clampedZoom });
   };
 

@@ -57,7 +57,7 @@ const customTheme = EditorView.theme({
   "&.cm-focused": { outline: "1px solid var(--accent-border)" },
   ".cm-scroller": {
     fontFamily: "var(--font-ui)",
-    fontSize: "13.5px",
+    fontSize: "calc(13.5px * var(--document-zoom, 1))",
     lineHeight: "1.75",
     // Must be "auto" (not hidden/clip) so the native scrollbar renders.
     overflow: "auto",
@@ -190,7 +190,15 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   return (
     <div
       className="edit-mode"
-      style={{ height: "100%", overflow: "hidden", display: "flex", flexDirection: "column" }}
+      style={
+        {
+          "--document-zoom": tab.documentZoom ?? 1,
+          height: "100%",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+        } as React.CSSProperties
+      }
     >
       <CodeMirror
         ref={editorRef}

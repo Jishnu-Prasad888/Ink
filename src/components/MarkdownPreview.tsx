@@ -166,6 +166,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
           width: "100%",
           maxWidth: isFullWidth ? "none" : "740px",
           margin: isFullWidth ? "0" : "0 auto",
+          fontSize: `calc(14px * ${tab.documentZoom ?? 1})`,
         }}
         dangerouslySetInnerHTML={{ __html: html }}
       />

@@ -17,6 +17,7 @@ export interface Tab {
   cursorPosition?: number;
   scrollPosition?: number;
   previewScrollPosition?: number;
+  documentZoom?: number;
   pdfPage?: number;
   pdfZoom?: number;
   pdfRotation?: 0 | 90 | 180 | 270;
