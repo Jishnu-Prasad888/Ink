@@ -38,6 +38,9 @@ const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[App:${msg}]`, data ?? "");
 };
 
+const isSupportedDocumentPath = (path: string) =>
+  [".md", ".markdown", ".txt", ".pdf"].some((extension) => path.toLowerCase().endsWith(extension));
+
 const changeDocumentZoom = (tabId: string, direction: -1 | 0 | 1) => {
   const { tabs, updateTab } = useTabStore.getState();
   const tab = tabs.find((item) => item.id === tabId);
@@ -213,14 +216,21 @@ function SplitFilePanel({
           role="tablist"
           aria-label={`Open documents in panel ${panelIndex + 1}`}
           onDragOver={(event) => {
-            if (!event.dataTransfer.types.includes("application/x-ink-tab")) return;
+            if (event.dataTransfer.types.includes("Files")) return;
+            const hasTab =
+              event.dataTransfer.types.includes("application/x-ink-tab") ||
+              event.dataTransfer.types.includes("text/plain");
+            if (!hasTab) return;
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
           }}
           onDrop={(event) => {
-            const tabId = event.dataTransfer.getData("application/x-ink-tab");
+            const customTabId = event.dataTransfer.getData("application/x-ink-tab");
+            const plainTabId = event.dataTransfer.getData("text/plain").replace(/^ink-tab:/, "");
+            const tabId = customTabId || plainTabId;
             if (!tabId) return;
             event.preventDefault();
+            event.stopPropagation();
             setPanelTab(panelIndex, tabId);
           }}
         >
@@ -231,6 +241,7 @@ function SplitFilePanel({
               draggable
               onDragStart={(event) => {
                 event.dataTransfer.setData("application/x-ink-tab", tab.id);
+                event.dataTransfer.setData("text/plain", `ink-tab:${tab.id}`);
                 event.dataTransfer.effectAllowed = "move";
               }}
             >
@@ -769,43 +780,98 @@ function App() {
 
   // ── Drag & drop ──────────────────────────────────────────────────────────
   useEffect(() => {
+    let dragDepth = 0;
+    const onDragEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      dragDepth += 1;
+      setIsDragging(true);
+    };
     const onDragOver = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
       setIsDragging(true);
     };
     const onDragLeave = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
-      setIsDragging(false);
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) setIsDragging(false);
     };
     const onDrop = async (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
       e.preventDefault();
+      dragDepth = 0;
       setIsDragging(false);
       const files = Array.from(e.dataTransfer?.files || []);
       for (const file of files) {
         const lower = file.name.toLowerCase();
-        if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
-          const content = await file.text();
-          addTab({
-            filePath: null,
-            fileName: file.name,
-            content,
-            mode: "edit",
-            isDirty: true,
-            type: "markdown",
-          });
+        if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt")) {
+          try {
+            const content = await file.text();
+            addTab({
+              filePath: null,
+              fileName: file.name,
+              content,
+              mode: "edit",
+              isDirty: true,
+              type: "markdown",
+            });
+          } catch (error) {
+            showToast(`Could not open ${file.name}: ${String(error)}`);
+          }
         }
       }
     };
+    window.addEventListener("dragenter", onDragEnter);
     window.addEventListener("dragover", onDragOver);
     window.addEventListener("dragleave", onDragLeave);
     window.addEventListener("drop", onDrop);
     return () => {
+      window.removeEventListener("dragenter", onDragEnter);
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("dragleave", onDragLeave);
       window.removeEventListener("drop", onDrop);
     };
-  }, [addTab]);
+  }, [addTab, showToast]);
+
+  useEffect(() => {
+    let draggingSupportedFiles = false;
+    const unlisten = getCurrentWindow().onDragDropEvent((event) => {
+      switch (event.payload.type) {
+        case "enter":
+          draggingSupportedFiles = event.payload.paths.some(isSupportedDocumentPath);
+          setIsDragging(draggingSupportedFiles);
+          break;
+        case "over":
+          if (draggingSupportedFiles) setIsDragging(true);
+          break;
+        case "leave":
+          draggingSupportedFiles = false;
+          setIsDragging(false);
+          break;
+        case "drop": {
+          draggingSupportedFiles = false;
+          setIsDragging(false);
+          const paths = event.payload.paths.filter(isSupportedDocumentPath);
+          void (async () => {
+            for (const path of paths) {
+              try {
+                await openPath(path);
+              } catch (error) {
+                showToast(`Could not open ${path}: ${String(error)}`);
+              }
+            }
+          })();
+          break;
+        }
+      }
+    });
+    return () => {
+      void unlisten.then((stop) => stop());
+    };
+  }, [openPath, showToast]);
 
   // ── Tauri open-files event ───────────────────────────────────────────────
   useEffect(() => {
@@ -1218,7 +1284,7 @@ function App() {
 
       {isDragging && (
         <div className="drag-overlay">
-          <div className="drag-overlay-inner">Drop .md files to open</div>
+          <div className="drag-overlay-inner">Drop Markdown, text, or PDF files to open</div>
         </div>
       )}
 
