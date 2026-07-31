@@ -129,6 +129,7 @@ function SplitFilePanel({
 }) {
   const { tabs, splitLayout, setPanelTab } = useTabStore();
   const panelTabId = splitLayout.panels[panelIndex].tabId;
+  const panelTabs = tabs.filter((tab) => splitLayout.tabPanelAssignments[tab.id] === panelIndex);
   const contentId = `split-panel-${panelIndex}-content`;
 
   const navigateTabs = (direction: "previous" | "next" | "first" | "last", index: number) => {
@@ -136,11 +137,12 @@ function SplitFilePanel({
       direction === "first"
         ? 0
         : direction === "last"
-          ? tabs.length - 1
+          ? panelTabs.length - 1
           : direction === "previous"
-            ? (index - 1 + tabs.length) % tabs.length
-            : (index + 1) % tabs.length;
-    const target = tabs[targetIndex];
+            ? (index - 1 + panelTabs.length) % panelTabs.length
+            : (index + 1) % panelTabs.length;
+    const target = panelTabs[targetIndex];
+    if (!target) return;
     setPanelTab(panelIndex, target.id);
     onFocus();
     requestAnimationFrame(() => {
@@ -157,21 +159,41 @@ function SplitFilePanel({
         className="tab-bar split-file-panel-tabbar"
         role="tablist"
         aria-label={`Open documents in panel ${panelIndex + 1}`}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes("application/x-ink-tab")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          const tabId = event.dataTransfer.getData("application/x-ink-tab");
+          if (!tabId) return;
+          event.preventDefault();
+          setPanelTab(panelIndex, tabId);
+        }}
       >
-        {tabs.map((tab, index) => (
-          <Tab
+        {panelTabs.map((tab, index) => (
+          <div
             key={tab.id}
-            tab={tab}
-            isActive={panelTabId === tab.id}
-            onSelect={() => {
-              setPanelTab(panelIndex, tab.id);
-              onFocus();
+            role="presentation"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData("application/x-ink-tab", tab.id);
+              event.dataTransfer.effectAllowed = "move";
             }}
-            onClose={() => onRequestClose(tab.id)}
-            onNavigate={(direction) => navigateTabs(direction, index)}
-            elementId={`split-panel-${panelIndex}-tab-${tab.id}`}
-            controlsId={contentId}
-          />
+          >
+            <Tab
+              tab={tab}
+              isActive={panelTabId === tab.id}
+              onSelect={() => {
+                setPanelTab(panelIndex, tab.id);
+                onFocus();
+              }}
+              onClose={() => onRequestClose(tab.id)}
+              onNavigate={(direction) => navigateTabs(direction, index)}
+              elementId={`split-panel-${panelIndex}-tab-${tab.id}`}
+              controlsId={contentId}
+            />
+          </div>
         ))}
       </div>
       <div id={contentId} className="split-file-panel-content">
@@ -514,11 +536,14 @@ function App() {
       // Ctrl+Tab — cycle tabs
       if (ctrl && e.key === "Tab") {
         e.preventDefault();
-        const { tabs: t, activeTabId: aid } = useTabStore.getState();
-        if (t.length > 1 && aid) {
-          const idx = t.findIndex((x) => x.id === aid);
-          const next = (idx + (e.shiftKey ? -1 : 1) + t.length) % t.length;
-          setActiveTab(t[next].id);
+        const { tabs: t, activeTabId: aid, splitLayout: layout } = useTabStore.getState();
+        const availableTabs = layout.enabled
+          ? t.filter((tab) => layout.tabPanelAssignments[tab.id] === layout.activePanelIndex)
+          : t;
+        if (availableTabs.length > 1 && aid) {
+          const idx = availableTabs.findIndex((x) => x.id === aid);
+          const next = (idx + (e.shiftKey ? -1 : 1) + availableTabs.length) % availableTabs.length;
+          setActiveTab(availableTabs[next].id);
         }
         return;
       }

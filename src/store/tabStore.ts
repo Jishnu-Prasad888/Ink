@@ -31,6 +31,7 @@ export interface SplitLayout {
   direction: "horizontal" | "vertical";
   panels: [SplitPanel, SplitPanel];
   activePanelIndex: 0 | 1;
+  tabPanelAssignments: Record<string, 0 | 1>;
 }
 
 interface TabStore {
@@ -66,6 +67,7 @@ const defaultSplitLayout: SplitLayout = {
   direction: "horizontal",
   panels: [{ tabId: null }, { tabId: null }],
   activePanelIndex: 0,
+  tabPanelAssignments: {},
 };
 
 export const useTabStore = create<TabStore>()(
@@ -91,8 +93,16 @@ export const useTabStore = create<TabStore>()(
           // If split layout is active, assign to the active panel
           if (state.splitLayout.enabled) {
             const panels = [...state.splitLayout.panels] as [SplitPanel, SplitPanel];
-            panels[state.splitLayout.activePanelIndex] = { tabId: newTab.id };
-            newState.splitLayout = { ...state.splitLayout, panels };
+            const panelIndex = state.splitLayout.activePanelIndex;
+            panels[panelIndex] = { tabId: newTab.id };
+            newState.splitLayout = {
+              ...state.splitLayout,
+              panels,
+              tabPanelAssignments: {
+                ...state.splitLayout.tabPanelAssignments,
+                [newTab.id]: panelIndex,
+              },
+            };
           }
           return newState;
         });
@@ -110,25 +120,39 @@ export const useTabStore = create<TabStore>()(
         if (!tabToClose) return;
 
         const newTabs = state.tabs.filter((t) => t.id !== id);
+        const tabPanelAssignments = { ...state.splitLayout.tabPanelAssignments };
+        delete tabPanelAssignments[id];
+        const panels = state.splitLayout.panels.map((panel, panelIndex) => {
+          if (panel.tabId !== id) return panel;
+          const replacement = newTabs.find((tab) => tabPanelAssignments[tab.id] === panelIndex);
+          return { tabId: replacement?.id ?? null };
+        }) as [SplitPanel, SplitPanel];
+
+        let activePanelIndex = state.splitLayout.activePanelIndex;
         let newActiveId = state.activeTabId;
-
-        if (state.activeTabId === id && newTabs.length > 0) {
-          const index = state.tabs.findIndex((t) => t.id === id);
-          newActiveId = newTabs[Math.min(index, newTabs.length - 1)].id;
-        } else if (newTabs.length === 0) {
-          newActiveId = null;
+        if (state.splitLayout.enabled && state.activeTabId === id) {
+          newActiveId = panels[activePanelIndex].tabId;
+          if (!newActiveId) {
+            const otherPanelIndex = (activePanelIndex === 0 ? 1 : 0) as 0 | 1;
+            newActiveId = panels[otherPanelIndex].tabId;
+            if (newActiveId) activePanelIndex = otherPanelIndex;
+          }
+        } else if (!state.splitLayout.enabled && state.activeTabId === id) {
+          const index = state.tabs.findIndex((tab) => tab.id === id);
+          newActiveId = newTabs[Math.min(index, newTabs.length - 1)]?.id ?? null;
         }
-
-        // Remove this tab from split panels
-        const panels = state.splitLayout.panels.map((p) =>
-          p.tabId === id ? { tabId: newTabs[0]?.id ?? null } : p,
-        ) as [SplitPanel, SplitPanel];
+        if (newTabs.length === 0) newActiveId = null;
 
         set({
           tabs: newTabs,
           activeTabId: newActiveId,
           closedTabs: [tabToClose, ...state.closedTabs.slice(0, 9)],
-          splitLayout: { ...state.splitLayout, panels },
+          splitLayout: {
+            ...state.splitLayout,
+            panels,
+            activePanelIndex,
+            tabPanelAssignments,
+          },
         });
       },
 
@@ -139,26 +163,49 @@ export const useTabStore = create<TabStore>()(
           splitLayout: {
             ...get().splitLayout,
             panels: [{ tabId: null }, { tabId: null }],
+            tabPanelAssignments: {},
           },
         });
       },
 
       closeOtherTabs: (id) => {
-        set((state) => ({
-          tabs: state.tabs.filter((t) => t.id === id),
-          activeTabId: id,
-          splitLayout: {
-            ...state.splitLayout,
-            panels: state.splitLayout.panels.map((p) => (p.tabId !== id ? { tabId: id } : p)) as [
-              SplitPanel,
-              SplitPanel,
-            ],
-          },
-        }));
+        set((state) => {
+          const panelIndex = state.splitLayout.tabPanelAssignments?.[id] ?? 0;
+          const panels: [SplitPanel, SplitPanel] = [{ tabId: null }, { tabId: null }];
+          panels[panelIndex] = { tabId: id };
+          return {
+            tabs: state.tabs.filter((t) => t.id === id),
+            activeTabId: id,
+            splitLayout: {
+              ...state.splitLayout,
+              panels,
+              activePanelIndex: panelIndex,
+              tabPanelAssignments: { [id]: panelIndex },
+            },
+          };
+        });
       },
 
       setActiveTab: (id) => {
-        set({ activeTabId: id });
+        set((state) => {
+          if (!state.splitLayout.enabled) return { activeTabId: id };
+          const panelIndex =
+            state.splitLayout.tabPanelAssignments[id] ?? state.splitLayout.activePanelIndex;
+          const panels = [...state.splitLayout.panels] as [SplitPanel, SplitPanel];
+          panels[panelIndex] = { tabId: id };
+          return {
+            activeTabId: id,
+            splitLayout: {
+              ...state.splitLayout,
+              panels,
+              activePanelIndex: panelIndex,
+              tabPanelAssignments: {
+                ...state.splitLayout.tabPanelAssignments,
+                [id]: panelIndex,
+              },
+            },
+          };
+        });
       },
 
       reorderTabs: (startIndex, endIndex) => {
@@ -174,10 +221,23 @@ export const useTabStore = create<TabStore>()(
         const state = get();
         if (state.closedTabs.length > 0) {
           const [lastClosed, ...remaining] = state.closedTabs;
+          const panelIndex = state.splitLayout.activePanelIndex;
+          const panels = [...state.splitLayout.panels] as [SplitPanel, SplitPanel];
+          if (state.splitLayout.enabled) panels[panelIndex] = { tabId: lastClosed.id };
           set({
             tabs: [...state.tabs, lastClosed],
             closedTabs: remaining,
             activeTabId: lastClosed.id,
+            splitLayout: state.splitLayout.enabled
+              ? {
+                  ...state.splitLayout,
+                  panels,
+                  tabPanelAssignments: {
+                    ...state.splitLayout.tabPanelAssignments,
+                    [lastClosed.id]: panelIndex,
+                  },
+                }
+              : state.splitLayout,
           });
         }
       },
@@ -223,27 +283,37 @@ export const useTabStore = create<TabStore>()(
 
       enableSplitLayout: (direction) => {
         const state = get();
-        const firstTabId = state.activeTabId;
-        // Second panel gets the next tab, or same if only one
-        const otherTab = state.tabs.find((t) => t.id !== firstTabId);
-        const secondTabId = otherTab?.id ?? firstTabId;
+        const firstTabId = state.tabs.some((tab) => tab.id === state.activeTabId)
+          ? state.activeTabId
+          : (state.tabs[0]?.id ?? null);
+        const otherTabs = state.tabs.filter((tab) => tab.id !== firstTabId);
+        const tabPanelAssignments = Object.fromEntries(
+          state.tabs.map((tab) => [tab.id, tab.id === firstTabId ? 0 : 1]),
+        ) as Record<string, 0 | 1>;
         set({
+          activeTabId: firstTabId,
           splitLayout: {
             enabled: true,
             direction,
-            panels: [{ tabId: firstTabId }, { tabId: secondTabId ?? null }],
+            panels: [{ tabId: firstTabId }, { tabId: otherTabs[0]?.id ?? null }],
             activePanelIndex: 0,
+            tabPanelAssignments,
           },
         });
       },
 
       disableSplitLayout: () => {
-        set({
+        set((state) => ({
+          activeTabId:
+            state.activeTabId ??
+            state.splitLayout.panels.find((panel) => panel.tabId)?.tabId ??
+            state.tabs[0]?.id ??
+            null,
           splitLayout: {
-            ...get().splitLayout,
+            ...state.splitLayout,
             enabled: false,
           },
-        });
+        }));
       },
 
       setSplitDirection: (direction) => {
@@ -255,16 +325,35 @@ export const useTabStore = create<TabStore>()(
       setActiveSplitPanel: (panelIndex) => {
         set((state) => ({
           splitLayout: { ...state.splitLayout, activePanelIndex: panelIndex },
-          activeTabId: state.splitLayout.panels[panelIndex].tabId ?? state.activeTabId,
+          activeTabId: state.splitLayout.panels[panelIndex].tabId,
         }));
       },
 
       setPanelTab: (panelIndex, tabId) => {
         set((state) => {
+          if (!state.tabs.some((tab) => tab.id === tabId)) return state;
           const panels = [...state.splitLayout.panels] as [SplitPanel, SplitPanel];
+          const assignments = { ...state.splitLayout.tabPanelAssignments };
+          const previousPanelIndex = assignments[tabId];
+
+          if (previousPanelIndex !== undefined && previousPanelIndex !== panelIndex) {
+            if (panels[previousPanelIndex].tabId === tabId) {
+              const replacement = state.tabs.find(
+                (tab) => tab.id !== tabId && assignments[tab.id] === previousPanelIndex,
+              );
+              panels[previousPanelIndex] = { tabId: replacement?.id ?? null };
+            }
+          }
+
+          assignments[tabId] = panelIndex;
           panels[panelIndex] = { tabId };
           return {
-            splitLayout: { ...state.splitLayout, panels },
+            splitLayout: {
+              ...state.splitLayout,
+              panels,
+              activePanelIndex: panelIndex,
+              tabPanelAssignments: assignments,
+            },
             activeTabId: tabId,
           };
         });
@@ -283,6 +372,8 @@ export const useTabStore = create<TabStore>()(
           ...state.splitLayout,
           // Don't persist enabled state to avoid stale panels on reload
           enabled: false,
+          panels: [{ tabId: null }, { tabId: null }],
+          tabPanelAssignments: {},
         },
       }),
     },
