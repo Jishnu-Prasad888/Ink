@@ -35,6 +35,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [recording, setRecording] = useState<ShortcutId | null>(null);
   const [shortcutError, setShortcutError] = useState("");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (isOpen) closeButtonRef.current?.focus();
@@ -72,9 +73,25 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape" && !recording) onClose();
+        if (event.key !== "Tab" || !dialogRef.current) return;
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
+          ),
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }}
     >
       <section
+        ref={dialogRef}
         className="settings-dialog"
         role="dialog"
         aria-modal="true"

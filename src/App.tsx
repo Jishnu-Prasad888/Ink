@@ -591,12 +591,12 @@ function App() {
   useEffect(() => {
     const onKeyDown = async (e: KeyboardEvent) => {
       if (e.isComposing) return;
+      if (settingsOpen) return;
       if (matchesShortcut(e, shortcuts["app.settings"])) {
         e.preventDefault();
-        setSettingsOpen((open) => !open);
+        setSettingsOpen(true);
         return;
       }
-      if (settingsOpen) return;
 
       if (matchesShortcut(e, shortcuts["app.commandPalette"])) {
         e.preventDefault();
@@ -904,150 +904,145 @@ function App() {
     <div className="app-container">
       {/* ── Toolbar ── */}
       <header className="toolbar" role="toolbar" aria-label="Application toolbar">
-        <button
-          className="toolbar-btn"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          title="Toggle Explorer (Ctrl+B)"
-          aria-label="Toggle Explorer"
-          aria-expanded={sidebarOpen}
-        >
-          <Icon.Menu />
-        </button>
-
-        <div className="toolbar-actions">
-          <button className="toolbar-btn" onClick={handleNewFile} title="New (Ctrl+N)">
-            <Icon.New /> New
+        <div className="toolbar-zone toolbar-zone--files">
+          <button
+            className="toolbar-btn toolbar-icon-btn"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            title={`Toggle Explorer (${formatShortcut(shortcuts["view.toggleExplorer"])})`}
+            aria-label="Toggle Explorer"
+            aria-expanded={sidebarOpen}
+          >
+            <Icon.Menu />
           </button>
-          <button className="toolbar-btn" onClick={handleOpenFile} title="Open (Ctrl+O)">
-            <Icon.Open /> Open
-          </button>
+          <span className="toolbar-brand" aria-label="Ink">
+            Ink
+          </span>
           <div className="toolbar-divider" />
           <button
             className="toolbar-btn"
+            onClick={handleNewFile}
+            title={`New (${formatShortcut(shortcuts["file.new"])})`}
+          >
+            <Icon.New /> New
+          </button>
+          <button
+            className="toolbar-btn"
+            onClick={handleOpenFile}
+            title={`Open (${formatShortcut(shortcuts["file.open"])})`}
+          >
+            <Icon.Open /> Open
+          </button>
+          <button
+            className="toolbar-btn"
             onClick={handleSaveFile}
-            title="Save (Ctrl+S)"
+            title={`Save (${formatShortcut(shortcuts["file.save"])})`}
             disabled={!activeTab || activeTab.type !== "markdown"}
           >
             <Icon.Save /> Save
           </button>
           <button
-            className="toolbar-btn"
+            className="toolbar-btn toolbar-compact-action"
             onClick={handleSaveAs}
-            title="Save As (Ctrl+Shift+S)"
+            title={`Save As (${formatShortcut(shortcuts["file.saveAs"])})`}
             disabled={!activeTab || activeTab.type !== "markdown"}
           >
             Save as
           </button>
           <button
-            className="toolbar-btn"
+            className="toolbar-btn toolbar-compact-action"
             onClick={() => setExportDialogOpen(true)}
             title={`Export PDF (${formatShortcut(shortcuts["file.exportPdf"])})`}
             disabled={!activeTab || activeTab.type !== "markdown"}
           >
-            Export PDF
+            Export
+          </button>
+        </div>
+
+        <div className="toolbar-center">
+          {activeTab?.type === "markdown" && !splitLayout.enabled && (
+            <div className="mode-switcher">
+              <button
+                aria-pressed={activeTab.mode === "edit"}
+                className={`mode-btn${activeTab.mode === "edit" ? " active" : ""}`}
+                onClick={() => handleModeChange("edit")}
+              >
+                Edit
+              </button>
+              <button
+                aria-pressed={activeTab.mode === "split"}
+                className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`}
+                onClick={() => handleModeChange("split")}
+              >
+                Side Preview
+              </button>
+              <button
+                aria-pressed={activeTab.mode === "view"}
+                className={`mode-btn${activeTab.mode === "view" ? " active" : ""}`}
+                onClick={() => handleModeChange("view")}
+              >
+                Preview
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="toolbar-zone toolbar-zone--workspace">
+          <button
+            className={`toolbar-btn toolbar-icon-btn${splitLayout.enabled && splitLayout.direction === "horizontal" ? " active" : ""}`}
+            onClick={() =>
+              splitLayout.enabled
+                ? setSplitDirection("horizontal")
+                : enableSplitLayout("horizontal")
+            }
+            title={tabs.length < 2 ? "Open another tab before splitting" : "Split right"}
+            disabled={tabs.length < 2}
+            aria-label="Split right"
+            aria-pressed={splitLayout.enabled && splitLayout.direction === "horizontal"}
+          >
+            <Icon.SplitH />
+          </button>
+          <button
+            className={`toolbar-btn toolbar-icon-btn${splitLayout.enabled && splitLayout.direction === "vertical" ? " active" : ""}`}
+            onClick={() =>
+              splitLayout.enabled ? setSplitDirection("vertical") : enableSplitLayout("vertical")
+            }
+            title={tabs.length < 2 ? "Open another tab before splitting" : "Split down"}
+            disabled={tabs.length < 2}
+            aria-label="Split down"
+            aria-pressed={splitLayout.enabled && splitLayout.direction === "vertical"}
+          >
+            <Icon.SplitV />
+          </button>
+          <button
+            className="toolbar-btn toolbar-icon-btn toolbar-btn--danger"
+            onClick={disableSplitLayout}
+            title="Close split view"
+            disabled={!splitLayout.enabled}
+            aria-label="Close split view"
+          >
+            <Icon.CloseSplit />
           </button>
           <div className="toolbar-divider" />
-
-          {/* Split-file view controls */}
-          {!splitLayout.enabled ? (
-            <>
-              <button
-                className="toolbar-btn"
-                onClick={() => enableSplitLayout("horizontal")}
-                title={
-                  tabs.length < 2
-                    ? "Open another tab before splitting"
-                    : "Open editor group to the right"
-                }
-                disabled={tabs.length < 2}
-              >
-                <Icon.SplitH /> Split Right
-              </button>
-              <button
-                className="toolbar-btn"
-                onClick={() => enableSplitLayout("vertical")}
-                title={
-                  tabs.length < 2 ? "Open another tab before splitting" : "Open editor group below"
-                }
-                disabled={tabs.length < 2}
-              >
-                <Icon.SplitV /> Split Down
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className={`toolbar-btn${splitLayout.direction === "horizontal" ? " active" : ""}`}
-                onClick={() => setSplitDirection("horizontal")}
-                title="Side by side"
-                aria-pressed={splitLayout.direction === "horizontal"}
-              >
-                <Icon.SplitH />
-              </button>
-              <button
-                className={`toolbar-btn${splitLayout.direction === "vertical" ? " active" : ""}`}
-                onClick={() => setSplitDirection("vertical")}
-                title="Top / bottom"
-                aria-pressed={splitLayout.direction === "vertical"}
-              >
-                <Icon.SplitV />
-              </button>
-              <button
-                className="toolbar-btn toolbar-btn--danger"
-                onClick={disableSplitLayout}
-                title="Close split view"
-              >
-                <Icon.CloseSplit /> Close split
-              </button>
-            </>
-          )}
-          <div className="toolbar-divider" />
           <button
-            className="toolbar-btn"
+            className="toolbar-btn toolbar-compact-action"
             onClick={() => {
               setCommandPaletteOpen(true);
               setCommandQuery("");
               setCommandIndex(0);
             }}
-            title="Command Palette (Ctrl+Shift+P)"
+            title={`Command Palette (${formatShortcut(shortcuts["app.commandPalette"])})`}
           >
             Commands
           </button>
           <button
-            className="toolbar-btn settings-button"
+            className="toolbar-btn toolbar-icon-btn settings-button"
             onClick={() => setSettingsOpen(true)}
             title={`Settings (${formatShortcut(shortcuts["app.settings"])})`}
             aria-label="Open settings"
           >
-            <Icon.Settings /> Settings
+            <Icon.Settings />
           </button>
         </div>
-
-        {activeTab?.type === "markdown" && !splitLayout.enabled && (
-          <div className="mode-switcher">
-            <button
-              aria-pressed={activeTab.mode === "edit"}
-              className={`mode-btn${activeTab.mode === "edit" ? " active" : ""}`}
-              onClick={() => handleModeChange("edit")}
-            >
-              Edit
-            </button>
-            <button
-              aria-pressed={activeTab.mode === "split"}
-              className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`}
-              onClick={() => handleModeChange("split")}
-            >
-              Preview to Side
-            </button>
-            <button
-              aria-pressed={activeTab.mode === "view"}
-              className={`mode-btn${activeTab.mode === "view" ? " active" : ""}`}
-              onClick={() => handleModeChange("view")}
-            >
-              Preview
-            </button>
-          </div>
-        )}
       </header>
 
       {/* ── Main layout ── */}
