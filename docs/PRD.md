@@ -26,9 +26,10 @@ Ink is a fast, local-first Markdown workspace that combines VS Code-style naviga
 - Atomic writes and content-fingerprint conflict detection
 - Crash-resistant persisted drafts and session restoration
 - Safe Markdown preview with Mermaid, math, tasks, footnotes, and highlighting
-- Tabs, editor groups, Command Palette, Explorer, status bar, and themes
+- Tabs, exclusive editor groups, Command Palette, Explorer, recent files, status bar, themes, fonts, and per-tab zoom
 - Keyboard and screen-reader semantics for core navigation
-- Basic PDF viewing
+- PDF viewing with page navigation, zoom, fit-to-width, rotation, and persisted state
+- Print-ready PDF export with portrait and landscape orientation
 
 ## Functional Requirements
 
@@ -47,10 +48,10 @@ Ink is a fast, local-first Markdown workspace that combines VS Code-style naviga
 | PREV-01    | Provide Edit, Preview, and Preview to Side                                  | Complete                    |
 | GROUP-01   | Support two resizable editor groups                                         | Complete                    |
 | CMD-01     | Provide a searchable Command Palette                                        | Complete                    |
-| UI-01      | Support light, dark, and system themes                                      | Complete                    |
+| UI-01      | Support light, dark, system, Nord, and Charcoal themes                      | Complete                    |
 | A11Y-01    | Provide semantic tabs, trees, toolbars, dialogs, and separators             | Complete                    |
-| PDF-01     | Open and navigate PDF documents                                             | Complete                    |
-| EXPORT-01  | Export semantic HTML and print-ready PDF                                    | Planned                     |
+| PDF-01     | Open, navigate, zoom, and rotate PDF documents                              | Complete                    |
+| EXPORT-01  | Export print-ready PDF                                                      | Complete                    |
 | FILE-02    | Rename, move, duplicate, trash, and reveal files                            | Planned                     |
 | PREV-02    | Synchronize editor and preview scrolling through source maps                | Planned                     |
 | SEARCH-01  | Search across all files in a workspace                                      | Planned                     |
@@ -79,8 +80,7 @@ Ink is a fast, local-first Markdown workspace that combines VS Code-style naviga
 ### Publishing
 
 - Semantic standalone HTML export
-- Print stylesheet and native PDF export workflow
-- Export theme and page-size settings
+- Additional page sizes and export themes
 
 ### Performance
 
@@ -91,8 +91,7 @@ Ink is a fast, local-first Markdown workspace that combines VS Code-style naviga
 
 ### PDF
 
-- Zoom, fit-to-width, rotation, search, and thumbnails
-- Persist page and zoom per PDF document
+- Search and thumbnails
 
 ## Success Measures
 

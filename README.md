@@ -4,14 +4,15 @@ Ink is a secure, local-first Markdown workspace for Windows, macOS, and Linux. I
 
 ## Features
 
-- CodeMirror 6 editor with syntax highlighting, folding, search, undo, and autocomplete
+- CodeMirror 6 editor with syntax highlighting, folding, search, undo, autocomplete, multiple cursors, and intelligent Markdown continuation
 - Edit, Preview, and Preview to Side modes
-- Multi-document tabs and resizable editor groups
-- Folder Explorer with Markdown, text, and PDF support
+- Multi-document tabs and resizable editor groups with exclusive per-pane tabs and independent Edit/Preview controls
+- Folder Explorer with Markdown, text, PDF, recent-file, close-folder, and native drag-and-drop support
 - Mermaid, KaTeX, footnotes, task lists, tables, and highlighted code blocks
-- Command Palette with `Ctrl+Shift+P` / `Cmd+Shift+P`
-- Light, dark, and system themes
-- Document status with cursor position and word count
+- Command Palette with `Ctrl+\`` / `Cmd+\``
+- Light, dark, Nord, Charcoal, and system themes with application-wide font selection
+- Document status with cursor position, word count, and per-tab zoom controls
+- PDF zoom, rotation, fit-to-width, and print-ready portrait or landscape export
 - Session restoration and recently closed tabs
 - Atomic saves, stale-file detection, and unsaved-change protection
 - Sanitized previews and a restrictive Tauri content security policy
@@ -30,12 +31,14 @@ Ink is a secure, local-first Markdown workspace for Windows, macOS, and Linux. I
 | `Ctrl/Cmd+Shift+Tab` | Previous document      |
 | `Ctrl/Cmd+Shift+T`   | Reopen closed document |
 | `Ctrl/Cmd+B`         | Toggle Explorer        |
-| `Ctrl/Cmd+Shift+P`   | Command Palette        |
+| `Ctrl/Cmd+\``        | Command Palette        |
 | `Ctrl/Cmd+1`         | Edit mode              |
 | `Ctrl/Cmd+2`         | Preview to Side        |
 | `Ctrl/Cmd+3`         | Preview mode           |
 
 CodeMirror provides standard editor shortcuts such as `Ctrl/Cmd+F`, undo, redo, and selection commands.
+
+Additional editor shortcuts, including multiple cursors and line movement, can be reviewed and customized in Settings.
 
 ## Development
 

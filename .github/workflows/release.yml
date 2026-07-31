@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "1.2.0"
+      - "1.3.0"
 
 permissions:
   contents: write
@@ -44,11 +44,72 @@ jobs:
           tagName: __VERSION__
           releaseName: Ink __VERSION__
           releaseBody: |
-            ## Ink 1.2.0
+            # Ink 1.3.0
 
-            - Fixed quitting from the window close button.
-            - Restored consistent tabs and close controls in split mode.
-            - Improved document safety, workspace navigation, and Markdown rendering security.
+            Ink 1.3.0 is a major workspace, editing, and customization release. It expands Ink from a focused Markdown editor into a more capable local-first writing environment while preserving document safety and accessibility.
+
+            ## Workspace and interface
+
+            - Introduces a complete clay-inspired visual system with dimensional surfaces, consistent controls, clearer active states, and responsive layouts.
+            - Reorganizes the application header into fixed file, document-mode, and workspace control zones so actions no longer move as modes change.
+            - Adds persistent Light, Dark, Nord, Charcoal, and System themes through a dedicated Settings dialog.
+            - Adds application-wide font selection with System Sans, Modern Sans, Accessible, Classic Serif, and Monospace choices.
+            - Improves text and editor selection visibility across every color theme.
+            - Adds per-tab document zoom with bottom-bar controls, reset, and Ctrl+mouse-wheel support for Markdown, previews, split views, and PDFs.
+
+            ## Editing and keyboard workflows
+
+            - Adds configurable keyboard shortcuts with conflict detection, reset controls, and a collapsible shortcut reference in Settings.
+            - Moves the Command Palette to Ctrl+` on Windows/Linux and Cmd+` on macOS, with the current shortcut shown on button hover.
+            - Adds multiple cursors with Alt+Shift+Up/Down and line movement with Alt+Up/Down.
+            - Preserves standard Shift+Arrow character selection and Ctrl/Cmd+Shift+Arrow word selection.
+            - Automatically completes fenced code blocks after typing triple backticks and pressing Enter.
+            - Continues ordered lists, including the `1)` style, nested indentation, bullet lists, and blockquotes intelligently.
+            - Keeps generated Markdown continuation easy to cancel or edit with normal Backspace behavior.
+
+            ## Split editor groups
+
+            - Gives every tab exclusive ownership of one editor group instead of duplicating tabs across both panes.
+            - Supports moving tabs between groups with drag and drop.
+            - Automatically closes the split layout when either group no longer contains a tab.
+            - Adds independent Edit or Preview modes to each pane.
+            - Adds independent Readable or Full preview widths to each pane.
+            - Keeps tab cycling scoped to the focused editor group.
+
+            ## PDF and export improvements
+
+            - Adds PDF zoom from 50% to 300%, fit-to-width, clockwise rotation, and counterclockwise rotation.
+            - Persists PDF page, zoom, and rotation state per document.
+            - Adds Markdown PDF export with portrait and landscape A4 layouts.
+            - Renders sanitized Markdown, syntax highlighting, Mermaid diagrams, KaTeX, tables, images, and page-break-aware content into a print-ready document.
+            - Uses the operating system print dialog so exported PDF text remains selectable.
+
+            ## Explorer and file workflows
+
+            - Adds Close Folder without closing documents that are already open.
+            - Refreshes the Explorer tree with disclosure indicators, open-folder icons, active-file highlighting, nesting guides, empty-folder states, and case-insensitive sorting.
+            - Adds a persistent Recent Files panel to the empty workspace with direct open, stale-entry cleanup, and history clearing.
+            - Restores native Tauri drag and drop for Markdown, text, and PDF files while retaining browser-development fallback.
+            - Hardens tab drag and drop when webviews strip custom drag data types.
+
+            ## Accessibility and reliability
+
+            - Strengthens dark-theme contrast for primary, secondary, muted, link, danger, border, focus, and syntax colors.
+            - Adds persistent link underlines and stronger keyboard focus indicators.
+            - Adds focus containment and keyboard dismissal to Settings.
+            - Preserves multiple cursor selections during editor state persistence.
+            - Protects folder switching, export cleanup, shortcut recording, split state, and asynchronous file workflows against race conditions and stale state.
+
+            ## Upgrade notes
+
+            - Existing documents, drafts, themes, and session data remain compatible.
+            - Users who still had the previous default Command Palette shortcut are migrated automatically to Ctrl/Cmd+`.
+            - PDF export opens the platform print dialog; choose the system Save as PDF destination to write the file.
+
+            ## Verification
+
+            - Frontend formatting, linting, 23 automated tests, TypeScript compilation, and production bundling pass.
+            - Rust formatting, tests, and Tauri compilation pass.
 
             Download the installer or package for your operating system below.
           releaseDraft: false
