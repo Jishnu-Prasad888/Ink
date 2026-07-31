@@ -25,6 +25,9 @@
   --accent-bg-hover: #dce9fb;
   --accent-border: #c3d4f8;
   --accent-contrast: #ffffff;
+  --selection-bg: #a9c8ff;
+  --selection-bg-inactive: #d6e3fa;
+  --selection-match: #e8effc;
 
   --danger: #c0392b;
   --danger-bg: #fdf0ef;
@@ -68,6 +71,9 @@
   --accent-bg-hover: #2c4468;
   --accent-border: #668fca;
   --accent-contrast: #0d1b2a;
+  --selection-bg: #385f98;
+  --selection-bg-inactive: #293a54;
+  --selection-match: #2c4264;
   --danger: #ff9b91;
   --danger-bg: #502b2c;
   --drag-overlay: rgb(16 19 24 / 90%);
@@ -98,6 +104,9 @@
   --accent-bg-hover: #3d5c69;
   --accent-border: #70b7c8;
   --accent-contrast: #20252d;
+  --selection-bg: #416b79;
+  --selection-bg-inactive: #394b57;
+  --selection-match: #3b5964;
   --danger: #f19a9a;
   --danger-bg: #55363d;
   --drag-overlay: rgb(36 41 51 / 90%);
@@ -128,6 +137,9 @@
   --accent-bg-hover: #654a31;
   --accent-border: #bd8751;
   --accent-contrast: #26180d;
+  --selection-bg: #704d2f;
+  --selection-bg-inactive: #493728;
+  --selection-match: #59412d;
   --danger: #ff9f93;
   --danger-bg: #542d28;
   --drag-overlay: rgb(23 22 20 / 90%);
@@ -159,6 +171,9 @@
     --accent-bg-hover: #2c4468;
     --accent-border: #668fca;
     --accent-contrast: #0d1b2a;
+    --selection-bg: #385f98;
+    --selection-bg-inactive: #293a54;
+    --selection-match: #2c4264;
     --danger: #ff9b91;
     --danger-bg: #502b2c;
     --drag-overlay: rgb(16 19 24 / 90%);
@@ -191,7 +206,7 @@
 
 ::selection {
   color: var(--text-primary);
-  background: var(--accent-bg-hover);
+  background: var(--selection-bg);
 }
 
 .sr-only {

@@ -5,6 +5,8 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { Tab, useTabStore } from "../store/tabStore";
+import { useSettingsStore } from "../store/settingsStore";
+import { editorKeymapExtensions } from "./editorExtensions";
 
 interface EditorProps {
   tab: Tab;
@@ -78,8 +80,15 @@ const customTheme = EditorView.theme({
     backgroundColor: "var(--surface-hover)",
     color: "var(--text-secondary)",
   },
-  ".cm-selectionBackground, ::selection": {
-    backgroundColor: "var(--accent-bg) !important",
+  ".cm-selectionBackground": {
+    backgroundColor: "var(--selection-bg-inactive) !important",
+  },
+  "&.cm-focused .cm-selectionBackground": {
+    backgroundColor: "var(--selection-bg) !important",
+  },
+  ".cm-selectionMatch": {
+    backgroundColor: "var(--selection-match)",
+    outline: "1px solid var(--accent-border)",
   },
   ".cm-cursor": {
     borderLeftColor: "var(--accent)",
@@ -113,6 +122,7 @@ const customTheme = EditorView.theme({
 export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   const saveTabContent = useTabStore((state) => state.saveTabContent);
   const updateTab = useTabStore((state) => state.updateTab);
+  const shortcuts = useSettingsStore((state) => state.shortcuts);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   log("mount", { tabId: tab.id, fileName: tab.fileName });
@@ -197,6 +207,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
         extensions={[
           markdown(),
           syntaxHighlighting(markdownHighlightStyle),
+          ...editorKeymapExtensions(shortcuts),
           EditorView.lineWrapping,
         ]}
         style={{ flex: 1, minHeight: 0, overflow: "hidden" }}
@@ -215,7 +226,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
           crosshairCursor: false,
           highlightSelectionMatches: true,
           closeBracketsKeymap: true,
-          defaultKeymap: true,
+          defaultKeymap: false,
           searchKeymap: true,
           historyKeymap: true,
           foldKeymap: true,
