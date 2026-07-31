@@ -124,6 +124,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   const updateTab = useTabStore((state) => state.updateTab);
   const shortcuts = useSettingsStore((state) => state.shortcuts);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const initialCursorPosition = useRef(tab.cursorPosition);
 
   log("mount", { tabId: tab.id, fileName: tab.fileName });
 
@@ -152,16 +153,16 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   }, [tab.id, updateTab]);
 
   useEffect(() => {
-    if (editorRef.current && tab.cursorPosition !== undefined) {
+    if (editorRef.current && initialCursorPosition.current !== undefined) {
       const view = editorRef.current.view;
       if (view) {
         view.dispatch({
-          selection: { anchor: tab.cursorPosition },
+          selection: { anchor: initialCursorPosition.current },
           scrollIntoView: true,
         });
       }
     }
-  }, [tab.cursorPosition]);
+  }, []);
 
   // Restore scroll position once on mount.
   useEffect(() => {
