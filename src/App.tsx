@@ -19,6 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { quitApp } from "./utils/appQuit";
+import { Toolbar } from "./components/Toolbar";
 
 interface FileInfo {
   modified: number;
@@ -1136,29 +1137,10 @@ function App() {
 
         <div className="toolbar-center">
           {activeTab?.type === "markdown" && !splitLayout.enabled && (
-            <div className="mode-switcher">
-              <button
-                aria-pressed={activeTab.mode === "edit"}
-                className={`mode-btn${activeTab.mode === "edit" ? " active" : ""}`}
-                onClick={() => handleModeChange("edit")}
-              >
-                Edit
-              </button>
-              <button
-                aria-pressed={activeTab.mode === "split"}
-                className={`mode-btn${activeTab.mode === "split" ? " active" : ""}`}
-                onClick={() => handleModeChange("split")}
-              >
-                Side Preview
-              </button>
-              <button
-                aria-pressed={activeTab.mode === "view"}
-                className={`mode-btn${activeTab.mode === "view" ? " active" : ""}`}
-                onClick={() => handleModeChange("view")}
-              >
-                Preview
-              </button>
-            </div>
+            <Toolbar
+              mode={activeTab.mode}
+              onModeChange={handleModeChange}
+            />
           )}
         </div>
 
