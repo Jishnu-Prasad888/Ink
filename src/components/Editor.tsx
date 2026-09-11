@@ -17,11 +17,10 @@ const log = (msg: string, data?: unknown) => {
   if (import.meta.env.DEV) console.log(`[Editor:${msg}]`, data ?? "");
 };
 
+/** Uniform metrics — no per-heading font-size changes (those make selection boxes jagged). */
 const markdownHighlightStyle = HighlightStyle.define([
   { tag: tags.content, color: "var(--text-primary)" },
-  { tag: tags.heading, color: "var(--text-primary)", fontWeight: "650" },
-  { tag: tags.heading1, fontSize: "1.12em" },
-  { tag: tags.heading2, fontSize: "1.05em" },
+  { tag: tags.heading, color: "var(--text-primary)", fontWeight: "700" },
   {
     tag: [tags.link, tags.url],
     color: "var(--accent)",
@@ -54,30 +53,39 @@ const customTheme = EditorView.theme({
     color: "var(--text-primary)",
     height: "100%",
   },
-  "&.cm-focused": { outline: "1px solid var(--accent-border)" },
+  "&.cm-focused": { outline: "none" },
   ".cm-scroller": {
-    fontFamily: "var(--font-ui)",
+    fontFamily: "var(--font-editor)",
     fontSize: "calc(13.5px * var(--document-zoom, 1))",
-    lineHeight: "1.75",
-    // Must be "auto" (not hidden/clip) so the native scrollbar renders.
+    lineHeight: "1.65",
+    fontVariantLigatures: "none",
     overflow: "auto",
   },
   ".cm-content": {
-    padding: "24px 28px",
+    padding: "22px 28px",
     caretColor: "var(--accent)",
+    fontFamily: "inherit",
+  },
+  ".cm-line": {
+    padding: "0 2px",
   },
   ".cm-gutters": {
-    backgroundColor: "var(--surface-raised)",
+    backgroundColor: "var(--surface)",
     borderRight: "1px solid var(--border)",
     color: "var(--text-muted)",
-    minWidth: "48px",
-    paddingRight: "8px",
+    minWidth: "44px",
+    paddingRight: "6px",
   },
-  ".cm-gutter": { backgroundColor: "var(--surface-raised)" },
-  ".cm-lineNumbers .cm-gutterElement": { fontSize: "11.5px" },
-  ".cm-activeLine": { backgroundColor: "var(--bg)" },
+  ".cm-gutter": { backgroundColor: "transparent" },
+  ".cm-lineNumbers .cm-gutterElement": {
+    fontSize: "11px",
+    fontFamily: "var(--font-editor)",
+    padding: "0 8px 0 4px",
+    minWidth: "2.5em",
+  },
+  ".cm-activeLine": { backgroundColor: "transparent" },
   ".cm-activeLineGutter": {
-    backgroundColor: "var(--surface-hover)",
+    backgroundColor: "transparent",
     color: "var(--text-secondary)",
   },
   ".cm-selectionBackground": {
@@ -88,33 +96,34 @@ const customTheme = EditorView.theme({
   },
   ".cm-selectionMatch": {
     backgroundColor: "var(--selection-match)",
-    outline: "1px solid var(--accent-border)",
   },
-  ".cm-cursor": {
+  ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--accent)",
     borderLeftWidth: "2px",
   },
   ".cm-matchingBracket": {
     backgroundColor: "var(--accent-bg)",
     outline: "1px solid var(--accent-border)",
+    borderRadius: "3px",
   },
   ".cm-foldPlaceholder": {
     background: "var(--accent-bg)",
     border: "1px solid var(--accent-border)",
     color: "var(--accent)",
-    borderRadius: "3px",
-    padding: "0 4px",
+    borderRadius: "6px",
+    padding: "0 5px",
   },
   ".cm-tooltip": {
     background: "var(--surface)",
     border: "1px solid var(--border)",
-    borderRadius: "6px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    borderRadius: "10px",
+    boxShadow: "var(--shadow-menu)",
+    overflow: "hidden",
   },
   ".cm-tooltip-autocomplete": {
     "& > ul > li[aria-selected]": {
-      background: "var(--accent-bg)",
-      color: "var(--text-primary)",
+      background: "var(--accent)",
+      color: "var(--accent-contrast)",
     },
   },
 });
@@ -125,6 +134,8 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   const shortcuts = useSettingsStore((state) => state.shortcuts);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const initialCursorPosition = useRef(tab.cursorPosition);
+  const cursorUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSearchQuery = useRef(searchQuery);
 
   log("mount", { tabId: tab.id, fileName: tab.fileName });
 
@@ -133,21 +144,28 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
     saveTabContent(tab.id, value);
   };
 
+  const persistCursor = (pos: number) => {
+    if (cursorUpdateTimer.current) clearTimeout(cursorUpdateTimer.current);
+    cursorUpdateTimer.current = setTimeout(() => {
+      updateTab(tab.id, { cursorPosition: pos });
+    }, 100);
+  };
+
   const handleFocus = () => {
     const view = editorRef.current?.view;
     if (!view) return;
-    const pos = view.state.selection.main.head;
-    updateTab(tab.id, { cursorPosition: pos });
+    persistCursor(view.state.selection.main.head);
   };
 
-  // Persist scroll position to the store only on unmount (tab switch / close).
-  // Doing it on every scroll event causes a render → useEffect → scrollTop
-  // assignment loop.
   useEffect(() => {
     const view = editorRef.current?.view;
     return () => {
+      if (cursorUpdateTimer.current) clearTimeout(cursorUpdateTimer.current);
       if (view) {
-        updateTab(tab.id, { scrollPosition: view.scrollDOM.scrollTop });
+        updateTab(tab.id, {
+          scrollPosition: view.scrollDOM.scrollTop,
+          cursorPosition: view.state.selection.main.head,
+        });
       }
     };
   }, [tab.id, updateTab]);
@@ -164,16 +182,17 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
     }
   }, []);
 
-  // Restore scroll position once on mount.
   useEffect(() => {
-    if (editorRef.current && tab.scrollPosition !== undefined) {
-      const view = editorRef.current.view;
-      if (view) view.scrollDOM.scrollTop = tab.scrollPosition;
+    const view = editorRef.current?.view;
+    if (view && tab.scrollPosition !== undefined) {
+      view.scrollDOM.scrollTop = tab.scrollPosition;
     }
-  }, [tab.scrollPosition]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab.id]);
 
-  // Jump to first line matching searchQuery whenever it changes.
   useEffect(() => {
+    if (searchQuery === lastSearchQuery.current) return;
+    lastSearchQuery.current = searchQuery;
     if (!searchQuery.trim() || !editorRef.current) return;
     const view = editorRef.current.view;
     if (!view) return;
@@ -205,11 +224,15 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
         value={tab.content ?? ""}
         onChange={handleChange}
         onFocus={handleFocus}
+        onBlur={() => {
+          const view = editorRef.current?.view;
+          if (!view) return;
+          if (cursorUpdateTimer.current) clearTimeout(cursorUpdateTimer.current);
+          updateTab(tab.id, { cursorPosition: view.state.selection.main.head });
+        }}
         onUpdate={(update) => {
           if (update.selectionSet) {
-            updateTab(tab.id, {
-              cursorPosition: update.state.selection.main.head,
-            });
+            persistCursor(update.state.selection.main.head);
           }
         }}
         theme={customTheme}
@@ -223,7 +246,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
         basicSetup={{
           lineNumbers: true,
           highlightActiveLineGutter: true,
-          highlightActiveLine: true,
+          highlightActiveLine: false,
           foldGutter: true,
           dropCursor: true,
           allowMultipleSelections: true,
@@ -241,6 +264,8 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
           foldKeymap: true,
           completionKeymap: true,
           lintKeymap: true,
+          // Native browser selection = white-on-blue (accessible). CM layer fights it.
+          drawSelection: false,
         }}
       />
     </div>

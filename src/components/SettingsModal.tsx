@@ -14,19 +14,19 @@ interface SettingsModalProps {
 }
 
 const themes: { value: ColorTheme; label: string; description: string }[] = [
-  { value: "system", label: "System", description: "Follow your desktop" },
-  { value: "light", label: "Light", description: "Warm paper" },
-  { value: "dark", label: "Dark", description: "Deep slate" },
-  { value: "nord", label: "Nord", description: "Polar blue" },
+  { value: "system", label: "System", description: "Match your device" },
+  { value: "light", label: "Light", description: "Clean white" },
+  { value: "dark", label: "Dark", description: "True black-gray" },
+  { value: "nord", label: "Nord", description: "Cool arctic" },
   { value: "charcoal", label: "Charcoal", description: "Warm graphite" },
 ];
 
 const fonts: { value: AppFont; label: string }[] = [
-  { value: "system", label: "System Sans" },
-  { value: "modern", label: "Modern Sans" },
+  { value: "system", label: "System (SF)" },
+  { value: "modern", label: "Inter" },
   { value: "accessible", label: "Accessible" },
-  { value: "serif", label: "Classic Serif" },
-  { value: "monospace", label: "Monospace" },
+  { value: "serif", label: "New York / Serif" },
+  { value: "monospace", label: "SF Mono" },
 ];
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {

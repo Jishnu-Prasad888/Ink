@@ -96,6 +96,12 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       const idx = node.textContent?.toLowerCase().indexOf(searchQuery.toLowerCase()) ?? -1;
 
       if (idx !== -1) {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, Math.min(idx + searchQuery.length, node.textContent?.length ?? idx));
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
         (node.parentElement as HTMLElement)?.scrollIntoView({
           behavior: "smooth",
           block: "center",
@@ -155,19 +161,14 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
         </div>
       )}
 
-      {/* Preview */}
       <div
         ref={previewRef}
-        className="markdown-preview"
-        style={{
-          height: "100%",
-          overflowY: "auto",
-          padding: isSplit ? "24px 28px" : "40px 48px",
-          width: "100%",
-          maxWidth: isFullWidth ? "none" : "740px",
-          margin: isFullWidth ? "0" : "0 auto",
-          fontSize: `calc(14px * ${tab.documentZoom ?? 1})`,
-        }}
+        className={`markdown-preview${isFullWidth ? " markdown-preview--full" : " markdown-preview--readable"}${isSplit ? " markdown-preview--split" : ""}`}
+        style={
+          {
+            "--document-zoom": tab.documentZoom ?? 1,
+          } as React.CSSProperties
+        }
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>
