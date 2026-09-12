@@ -298,10 +298,7 @@ pub async fn write_file(
     let client = build_client()?;
     let token = get_token()?;
     let encoded = encode_path(&path);
-    let url = format!(
-        "{base}?ref={branch}",
-        base = api_url(&owner, &repo, &format!("contents/{encoded}")),
-    );
+    let url = api_url(&owner, &repo, &format!("contents/{encoded}"));
     let b64 = base64::engine::general_purpose::STANDARD.encode(content.as_bytes());
     let mut body = serde_json::json!({
         "message": message,
