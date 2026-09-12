@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore, type AppFont, type ColorTheme } from "../store/settingsStore";
 import { useRemoteWorkspaceStore } from "../store/remoteWorkspaceStore";
+import { DeviceAuthModal } from "./DeviceAuthModal";
 import {
   defaultShortcuts,
   formatShortcut,
@@ -48,10 +49,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { activeRemote } = useRemoteWorkspaceStore();
   const [recording, setRecording] = useState<ShortcutId | null>(null);
   const [shortcutError, setShortcutError] = useState("");
-  const [tokenInput, setTokenInput] = useState("");
+  const [authOpen, setAuthOpen] = useState(false);
   const [hasToken, setHasToken] = useState(false);
-  const [tokenBusy, setTokenBusy] = useState(false);
-  const [tokenMessage, setTokenMessage] = useState("");
+  const [clientIdInput, setClientIdInput] = useState("");
+  const [hasClientId, setHasClientId] = useState(false);
+  const [clientIdBusy, setClientIdBusy] = useState(false);
+  const [clientIdMessage, setClientIdMessage] = useState("");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
 
@@ -64,42 +67,44 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     void invoke<boolean>("github_has_token")
       .then(setHasToken)
       .catch(() => setHasToken(false));
+    void invoke<boolean>("github_has_oauth_client_id")
+      .then(setHasClientId)
+      .catch(() => setHasClientId(false));
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const refreshTokenStatus = async () => {
-    const present = await invoke<boolean>("github_has_token");
+    const [present, clientIdPresent] = await Promise.all([
+      invoke<boolean>("github_has_token"),
+      invoke<boolean>("github_has_oauth_client_id"),
+    ]);
     setHasToken(present);
+    setHasClientId(clientIdPresent);
   };
 
-  const saveToken = async () => {
-    setTokenBusy(true);
-    setTokenMessage("");
+  const saveClientId = async () => {
+    setClientIdBusy(true);
+    setClientIdMessage("");
     try {
-      await invoke("github_set_token", { token: tokenInput });
-      const status = await invoke<string>("github_validate_token");
-      setTokenInput("");
+      await invoke("github_set_oauth_client_id", { clientId: clientIdInput });
+      setClientIdInput("");
       await refreshTokenStatus();
-      setTokenMessage(status);
+      setClientIdMessage("OAuth App client id saved.");
     } catch (error) {
-      setTokenMessage(String(error));
+      setClientIdMessage(String(error));
     } finally {
-      setTokenBusy(false);
+      setClientIdBusy(false);
     }
   };
 
-  const clearToken = async () => {
-    setTokenBusy(true);
-    setTokenMessage("");
+  const clearGithubAccess = async () => {
     try {
       await invoke("github_clear_token");
       await refreshTokenStatus();
-      setTokenMessage("Token removed.");
+      setClientIdMessage("Signed out of GitHub.");
     } catch (error) {
-      setTokenMessage(String(error));
-    } finally {
-      setTokenBusy(false);
+      setClientIdMessage(String(error));
     }
   };
 
@@ -245,64 +250,83 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div>
                 <h3 id="github-heading">GitHub</h3>
                 <p>
-                  Connect a Personal Access Token for private repos and commits. Saving a file in an
-                  open remote repo commits it directly to that repo&apos;s branch. Tokens are stored
-                  in the OS keychain, not in settings files.
+                  Sign in once with GitHub to open repositories and commit files. Saving a file in
+                  an open remote repo commits it directly to that repo&apos;s branch. Access is
+                  stored in the OS keychain, not in settings files.
                 </p>
               </div>
             </div>
             <div className="settings-row">
               <div>
-                <h3>Token status</h3>
-                <p>{hasToken ? "A GitHub token is saved on this device." : "No token saved."}</p>
+                <h3>GitHub access</h3>
+                <p>
+                  {hasToken
+                    ? "Signed in. Ink can open repositories and commit on your behalf."
+                    : "Not signed in yet."}
+                </p>
               </div>
               <span className={`settings-status-pill${hasToken ? " connected" : ""}`}>
                 {hasToken ? "Connected" : "Not connected"}
               </span>
             </div>
+            <div className="github-token-actions">
+              <button
+                type="button"
+                className="settings-primary-btn"
+                onClick={() => setAuthOpen(true)}
+              >
+                Sign in with GitHub
+              </button>
+              {hasToken && (
+                <button type="button" onClick={() => void clearGithubAccess()}>
+                  Sign out
+                </button>
+              )}
+            </div>
+            {clientIdMessage && (
+              <p className="settings-error" role="status">
+                {clientIdMessage}
+              </p>
+            )}
             <div className="github-token-form">
-              <label htmlFor="github-token-input">Personal Access Token</label>
+              <label htmlFor="github-oauth-client-id">
+                GitHub OAuth App client id{" "}
+                {hasClientId && <span className="settings-status-pill connected">configured</span>}
+              </label>
               <input
-                id="github-token-input"
-                type="password"
+                id="github-oauth-client-id"
+                type="text"
                 autoComplete="off"
                 spellCheck={false}
-                value={tokenInput}
-                disabled={tokenBusy}
-                placeholder="ghp_… or github_pat_…"
-                onChange={(event) => setTokenInput(event.target.value)}
+                value={clientIdInput}
+                disabled={clientIdBusy}
+                placeholder="Iv1.xxxxxxxxxxxx"
+                onChange={(event) => setClientIdInput(event.target.value)}
               />
               <div className="github-token-actions">
                 <button
                   type="button"
                   className="settings-primary-btn"
-                  disabled={tokenBusy || !tokenInput.trim()}
-                  onClick={() => void saveToken()}
+                  disabled={clientIdBusy || !clientIdInput.trim()}
+                  onClick={() => void saveClientId()}
                 >
-                  Save token
-                </button>
-                <button
-                  type="button"
-                  disabled={tokenBusy || !hasToken}
-                  onClick={() => void clearToken()}
-                >
-                  Clear
+                  Save client id
                 </button>
                 <button
                   type="button"
                   className="settings-link-btn"
                   onClick={() =>
-                    void openUrl("https://github.com/settings/tokens").catch(() => undefined)
+                    void openUrl("https://github.com/settings/developers").catch(() => undefined)
                   }
                 >
-                  Create token on GitHub
+                  Create an OAuth App on GitHub
                 </button>
               </div>
-              {tokenMessage && (
-                <p className="settings-error" role="status">
-                  {tokenMessage}
-                </p>
-              )}
+              <p className="open-remote-hint">
+                Register a GitHub OAuth App (name Ink, no callback URL needed), then copy its client
+                id here once so &quot;Sign in with GitHub&quot; can ask for repository access in
+                your browser.
+              </p>
             </div>
             {activeRemote && (
               <p className="open-remote-hint">
@@ -310,6 +334,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </p>
             )}
           </section>
+
+          <DeviceAuthModal
+            isOpen={authOpen}
+            onClose={() => setAuthOpen(false)}
+            onSuccess={() => void refreshTokenStatus()}
+          />
 
           <details className="settings-section shortcuts-section">
             <summary>

@@ -2075,6 +2075,34 @@ textarea,
   font-size: 12.5px;
 }
 
+.device-auth-code {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.device-auth-code code {
+  flex: 1;
+  padding: 10px 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.device-auth-code .sidebar-btn {
+  flex-shrink: 0;
+}
+
+.open-remote-signin {
+  margin-top: 8px;
+}
+
 .font-setting {
   padding-top: 16px;
   margin-top: 16px;

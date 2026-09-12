@@ -8,12 +8,51 @@ use serde_json::Value;
 
 const KEYRING_SERVICE: &str = "ink";
 const KEYRING_ACCOUNT: &str = "github-pat";
+const KEYRING_CLIENT_ID_ACCOUNT: &str = "github-oauth-client-id";
+
+const GITHUB_DEVICE_URL: &str = "https://github.com/login/device/code";
+const GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+const GITHUB_OAUTH_SCOPE: &str = "repo";
 
 const PERCENT_SEGMENT: &AsciiSet =
     &NON_ALPHANUMERIC.remove(b'.').remove(b'-').remove(b'_').remove(b'~');
 
 fn keyring_entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|e| e.to_string())
+}
+
+fn keyring_client_id_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_CLIENT_ID_ACCOUNT).map_err(|e| e.to_string())
+}
+
+pub fn set_oauth_client_id(client_id: String) -> Result<(), String> {
+    let trimmed = client_id.trim();
+    if trimmed.is_empty() {
+        return Err("OAuth App client id cannot be empty".into());
+    }
+    keyring_client_id_entry()?
+        .set_password(trimmed)
+        .map_err(|e| e.to_string())
+}
+
+pub fn get_oauth_client_id() -> Result<Option<String>, String> {
+    match keyring_client_id_entry()?.get_password() {
+        Ok(id) if !id.trim().is_empty() => Ok(Some(id)),
+        Ok(_) => Ok(None),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn require_oauth_client_id() -> Result<String, String> {
+    get_oauth_client_id()?.ok_or_else(|| {
+        "No GitHub OAuth App client id is set. In Settings, add the client id of a GitHub OAuth App to enable \"Sign in with GitHub\"."
+            .to_string()
+    })
+}
+
+pub fn has_oauth_client_id() -> Result<bool, String> {
+    Ok(get_oauth_client_id()?.is_some())
 }
 
 pub fn get_token() -> Result<Option<String>, String> {
@@ -49,12 +88,137 @@ pub fn has_token() -> Result<bool, String> {
 
 pub fn validate_token() -> Result<String, String> {
     let token = get_token()?.ok_or_else(|| {
-        "No GitHub token saved. Add a Personal Access Token in Settings.".to_string()
+        "No GitHub token saved. Sign in with GitHub in Settings.".to_string()
     })?;
     if token.len() < 8 {
-        return Err("Token looks too short. Paste a full GitHub Personal Access Token.".into());
+        return Err("Token looks too short. Sign in again with GitHub.".into());
     }
     Ok("Token is saved. It will be verified when you open a repo.".into())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceAuthResponse {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub expires_in: u64,
+    pub interval: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceAuthStatus {
+    pub authorized: bool,
+    /// Empty when fine, or a terminal error code like access_denied / expired_token.
+    pub code: String,
+    pub message: String,
+}
+
+/// Starts the GitHub OAuth device flow and returns the user code to display.
+pub async fn start_device_auth() -> Result<DeviceAuthResponse, String> {
+    let client_id = require_oauth_client_id()?;
+    let client = build_client()?;
+    let body = serde_json::json!({
+        "client_id": client_id,
+        "scope": GITHUB_OAUTH_SCOPE,
+    });
+    let resp = client
+        .post(GITHUB_DEVICE_URL)
+        .header("Accept", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error while starting GitHub sign in: {e}"))?;
+    let status_code = resp.status().as_u16();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if status_code != 200 {
+        let msg = serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|v| {
+                v["error_description"]
+                    .as_str()
+                    .or_else(|| v["error"].as_str())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| text.clone());
+        if status_code == 404 {
+            return Err(format!("GitHub does not recognize this OAuth App client id. {msg}"));
+        }
+        return Err(format!("GitHub sign-in error {status_code}: {msg}"));
+    }
+    if text.trim().is_empty() {
+        return Err("GitHub returned an empty sign-in response.".into());
+    }
+    let json: Value = serde_json::from_str(&text).map_err(|_| text)?;
+    Ok(DeviceAuthResponse {
+        device_code: json["device_code"].as_str().unwrap_or_default().to_string(),
+        user_code: json["user_code"].as_str().unwrap_or_default().to_string(),
+        verification_uri: json["verification_uri"]
+            .as_str()
+            .unwrap_or("https://github.com/login/device")
+            .to_string(),
+        expires_in: json["expires_in"].as_u64().unwrap_or(900),
+        interval: json["interval"].as_u64().unwrap_or(5).max(1),
+    })
+}
+
+/// Polls GitHub until the device code is authorized, then stores the token.
+pub async fn poll_device_auth(device_code: String) -> Result<DeviceAuthStatus, String> {
+    let client_id = require_oauth_client_id()?;
+    let client = build_client()?;
+    let body = serde_json::json!({
+        "client_id": client_id,
+        "device_code": device_code,
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+    });
+    let resp = client
+        .post(GITHUB_TOKEN_URL)
+        .header("Accept", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error while polling GitHub: {e}"))?;
+    let status_code = resp.status().as_u16();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if status_code == 429 || status_code == 403 {
+        return Ok(DeviceAuthStatus {
+            authorized: false,
+            code: "rate_limited".into(),
+            message: "GitHub rate-limited the request; retrying…".into(),
+        });
+    }
+    let json: Value = serde_json::from_str(&text).map_err(|_| text)?;
+    if let Some(access_token) = json["access_token"].as_str() {
+        set_token(access_token.to_string())?;
+        return Ok(DeviceAuthStatus {
+            authorized: true,
+            code: "authorized".into(),
+            message: "Signed in to GitHub.".into(),
+        });
+    }
+    let error = json["error"].as_str().unwrap_or("error");
+    let message = match error {
+        "authorization_pending" => "Waiting for you to authorize in the browser…".into(),
+        "slow_down" => "GitHub asked us to slow down; retrying…".into(),
+        "access_denied" => "Access denied. You declined the request in the browser.".into(),
+        "expired_token" => "This sign-in code expired. Please start again.".into(),
+        "incorrect_client_credentials" => "The GitHub OAuth App client id is invalid.".into(),
+        other => format!("GitHub sign-in issue: {other}"),
+    };
+    let terminal = matches!(
+        error,
+        "access_denied" | "expired_token" | "incorrect_client_credentials"
+    );
+    Ok(DeviceAuthStatus {
+        authorized: false,
+        code: if terminal {
+            error.to_string()
+        } else {
+            "pending".to_string()
+        },
+        message,
+    })
 }
 
 fn clean_remote_url(owner: &str, repo: &str) -> String {

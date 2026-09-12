@@ -304,6 +304,10 @@ pub fn run() {
             github_has_token,
             github_clear_token,
             github_validate_token,
+            github_set_oauth_client_id,
+            github_has_oauth_client_id,
+            github_start_device_auth,
+            github_poll_device_auth,
             github_open_repo,
             github_list_dir,
             github_read_file,
@@ -521,6 +525,28 @@ fn github_clear_token() -> Result<(), String> {
 #[tauri::command]
 fn github_validate_token() -> Result<String, String> {
     github_remote::validate_token()
+}
+
+#[tauri::command]
+fn github_set_oauth_client_id(client_id: String) -> Result<(), String> {
+    github_remote::set_oauth_client_id(client_id)
+}
+
+#[tauri::command]
+fn github_has_oauth_client_id() -> Result<bool, String> {
+    github_remote::has_oauth_client_id()
+}
+
+#[tauri::command]
+async fn github_start_device_auth() -> Result<github_remote::DeviceAuthResponse, String> {
+    github_remote::start_device_auth().await
+}
+
+#[tauri::command]
+async fn github_poll_device_auth(
+    device_code: String,
+) -> Result<github_remote::DeviceAuthStatus, String> {
+    github_remote::poll_device_auth(device_code).await
 }
 
 #[tauri::command]

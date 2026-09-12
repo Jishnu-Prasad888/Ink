@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRemoteWorkspaceStore, type ActiveRemote } from "../store/remoteWorkspaceStore";
+import { DeviceAuthModal } from "./DeviceAuthModal";
 
 interface RepoInfo {
   rootPath: string;
@@ -22,6 +23,7 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [hasToken, setHasToken] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
   const [localError, setLocalError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -109,9 +111,18 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
         />
         <p className="open-remote-hint">
           {hasToken
-            ? "GitHub token is saved for private repos and commits."
-            : "No token saved — public repos only until you add one in Settings."}
+            ? "Signed in with GitHub — you can open and commit to repositories."
+            : "Sign in to open private repositories and commit files right from Ink."}
         </p>
+        {!hasToken && (
+          <button
+            type="button"
+            className="settings-primary-btn open-remote-signin"
+            onClick={() => setAuthOpen(true)}
+          >
+            Sign in with GitHub
+          </button>
+        )}
         {localError && (
           <p className="open-remote-error" role="alert">
             {localError}
@@ -131,6 +142,15 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
           </button>
         </div>
       </section>
+      <DeviceAuthModal
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onSuccess={() => {
+          void invoke<boolean>("github_has_token")
+            .then(setHasToken)
+            .catch(() => setHasToken(false));
+        }}
+      />
     </div>
   );
 }
