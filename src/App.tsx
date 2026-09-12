@@ -120,12 +120,15 @@ const Icon = {
     </svg>
   ),
   Settings: () => (
-    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.3" />
-      <path
-        d="M7 1.5v1.2M7 11.3v1.2M1.5 7h1.2M11.3 7h1.2M3.1 3.1l.9.9M10 10l.9.9M10.9 3.1l-.9.9M4 10l-.9.9"
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+      <circle
+        cx="8"
+        cy="8"
+        r="4.8"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.2"
+        strokeDasharray="1.1 2.67"
         strokeLinecap="round"
       />
     </svg>
@@ -333,6 +336,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [openingFile, setOpeningFile] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const { theme, appFont, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
   const { recentFiles, addRecentFile, removeRecentFile, clearRecentFiles } = useRecentFilesStore();
@@ -404,7 +408,7 @@ function App() {
     window.setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const openPath = useCallback(
+  const openPathCore = useCallback(
     async (filePath: string) => {
       const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
       const existing = useTabStore.getState().tabs.find((tab) => tab.filePath === filePath);
@@ -489,6 +493,19 @@ function App() {
       addRecentFile(filePath, fileName);
     },
     [addRecentFile, addTab, showToast],
+  );
+
+  const openPath = useCallback(
+    async (filePath: string) => {
+      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+      setOpeningFile(fileName);
+      try {
+        await openPathCore(filePath);
+      } finally {
+        setOpeningFile(null);
+      }
+    },
+    [openPathCore],
   );
 
   const handleOpenFile = useCallback(async () => {
@@ -1446,6 +1463,13 @@ function App() {
       {toast && (
         <div className="app-toast" role="status">
           {toast}
+        </div>
+      )}
+
+      {openingFile && (
+        <div className="app-loading" role="status" aria-live="polite">
+          <span className="app-loading-spinner" aria-hidden="true" />
+          <span>Opening {openingFile}…</span>
         </div>
       )}
 
