@@ -2,6 +2,23 @@
 
 All notable changes to Ink are documented in this file.
 
+## 1.3.1 - 2026-09-12
+
+### Interface
+
+- Refined the UI toward a clearer Apple-inspired light visual system with stronger selection contrast.
+- Made application chrome text non-selectable while keeping editor, preview, inputs, and PDF text selectable.
+- Closed the Explorer sidebar by default on launch.
+- Moved toolbar controls into a dedicated component.
+
+### Editing experience
+
+- Animated Edit, Split, and Preview mode transitions with sliding panes and fade.
+
+### Reliability
+
+- Fixed npm peer-dependency install issues and CI formatting/lint failures blocking release checks.
+
 ## 1.3.0 - 2026-07-31
 
 ### Workspace and appearance
