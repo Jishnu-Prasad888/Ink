@@ -29,8 +29,10 @@ export function DeviceAuthModal({ isOpen, onClose, onSuccess }: DeviceAuthModalP
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [copied, setCopied] = useState(false);
   const pollRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const copiedTimerRef = useRef<number | null>(null);
   const onCloseRef = useRef(onClose);
   const onSuccessRef = useRef(onSuccess);
 
@@ -44,6 +46,7 @@ export function DeviceAuthModal({ isOpen, onClose, onSuccess }: DeviceAuthModalP
     let cancelled = false;
     pollRef.current = false;
     if (timerRef.current) window.clearTimeout(timerRef.current);
+    if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
 
     void invoke<DeviceAuthInfo>("github_start_device_auth")
       .then(async (info) => {
@@ -51,9 +54,10 @@ export function DeviceAuthModal({ isOpen, onClose, onSuccess }: DeviceAuthModalP
         setStatus("");
         setError("");
         setDone(false);
+        setCopied(false);
         setAuth(info);
-        await openUrl(info.verificationUri).catch(() => undefined);
         pollRef.current = true;
+        await openUrl(info.verificationUri).catch(() => undefined);
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
@@ -63,6 +67,7 @@ export function DeviceAuthModal({ isOpen, onClose, onSuccess }: DeviceAuthModalP
       cancelled = true;
       pollRef.current = false;
       if (timerRef.current) window.clearTimeout(timerRef.current);
+      if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
     };
   }, [isOpen]);
 
@@ -106,7 +111,11 @@ export function DeviceAuthModal({ isOpen, onClose, onSuccess }: DeviceAuthModalP
   if (!isOpen) return null;
 
   const copyCode = () => {
-    if (auth) void navigator.clipboard.writeText(auth.userCode).catch(() => undefined);
+    if (!auth) return;
+    void navigator.clipboard.writeText(auth.userCode).catch(() => undefined);
+    setCopied(true);
+    if (copiedTimerRef.current) window.clearTimeout(copiedTimerRef.current);
+    copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1500);
   };
 
   const idle = !auth && !error;
@@ -149,9 +158,16 @@ export function DeviceAuthModal({ isOpen, onClose, onSuccess }: DeviceAuthModalP
             </p>
             <div className="device-auth-code">
               <code>{auth.userCode}</code>
-              <button type="button" className="sidebar-btn" onClick={copyCode}>
-                Copy
-              </button>
+              <div className="device-auth-copy">
+                <button type="button" className="sidebar-btn" onClick={copyCode} disabled={done}>
+                  Copy
+                </button>
+                {copied && (
+                  <span className="device-auth-copied" role="status">
+                    Copied!
+                  </span>
+                )}
+              </div>
             </div>
             <p className="open-remote-hint">
               {auth.verificationUri}

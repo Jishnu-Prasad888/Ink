@@ -2099,6 +2099,18 @@ textarea,
   flex-shrink: 0;
 }
 
+.device-auth-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-auth-copied {
+  color: var(--accent, #2f81f7);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .open-remote-signin {
   margin-top: 8px;
 }
