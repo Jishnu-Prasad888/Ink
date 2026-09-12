@@ -329,7 +329,7 @@ function App() {
   } = useTabStore();
 
   const [isDragging, setIsDragging] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const { theme, appFont, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();

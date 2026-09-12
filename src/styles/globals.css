@@ -312,6 +312,23 @@ textarea {
   height: 100dvh;
   overflow: hidden;
   background: var(--bg);
+  /* UI chrome (toolbar, dialogs, sidebar labels, etc.) is not selectable */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Document / form text must stay selectable inside non-selectable chrome */
+.edit-mode .cm-content,
+.markdown-preview,
+input,
+textarea,
+[contenteditable="true"],
+.react-pdf__Page__textContent,
+.react-pdf__Page__textContent span,
+.textLayer,
+.textLayer span {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .content-area {
