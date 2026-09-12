@@ -337,7 +337,6 @@ pub struct RepoInfo {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct TreeEntry {
     pub name: String,
     pub path: String,
@@ -594,6 +593,18 @@ mod tests {
             api_url("octocat", "Hello-World", "contents"),
             "https://api.github.com/repos/octocat/Hello-World/contents"
         );
+    }
+
+    #[test]
+    fn tree_entry_serializes_is_dir_in_snake_case() {
+        let entry = TreeEntry {
+            name: "notes".into(),
+            path: "notes".into(),
+            is_dir: true,
+        };
+        let json = serde_json::to_value(entry).unwrap();
+        assert_eq!(json["is_dir"], true);
+        assert!(json.get("isDir").is_none());
     }
 
     #[test]
