@@ -251,7 +251,12 @@ fn clean_remote_url(owner: &str, repo: &str) -> String {
 }
 
 fn api_url(owner: &str, repo: &str, rest: &str) -> String {
-    format!("https://api.github.com/repos/{owner}/{repo}/{rest}")
+    let mut url = format!("https://api.github.com/repos/{owner}/{repo}");
+    if !rest.is_empty() {
+        url.push('/');
+        url.push_str(rest);
+    }
+    url
 }
 
 fn encode_path(path: &str) -> String {
@@ -576,6 +581,18 @@ mod tests {
         assert_eq!(
             parse_github_repo("git@github.com:octocat/Hello-World.git").unwrap(),
             ("octocat".into(), "Hello-World".into())
+        );
+    }
+
+    #[test]
+    fn api_url_has_no_trailing_slash_at_repo_root() {
+        assert_eq!(
+            api_url("Jishnu-Prasad888", "Just-Stuff", ""),
+            "https://api.github.com/repos/Jishnu-Prasad888/Just-Stuff"
+        );
+        assert_eq!(
+            api_url("octocat", "Hello-World", "contents"),
+            "https://api.github.com/repos/octocat/Hello-World/contents"
         );
     }
 
