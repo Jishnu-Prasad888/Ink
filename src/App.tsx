@@ -154,12 +154,7 @@ function TabContent({
   // File-split panels only support edit/preview; document modes animate via SplitView.
   if (viewMode === "view") {
     return (
-      <MarkdownPreview
-        key={tab.id}
-        tab={tab}
-        widthMode={previewWidth}
-        showWidthToggle={false}
-      />
+      <MarkdownPreview key={tab.id} tab={tab} widthMode={previewWidth} showWidthToggle={false} />
     );
   }
   if (viewMode === "edit") {
@@ -167,7 +162,6 @@ function TabContent({
   }
 
   return <SplitView key={tab.id} tab={tab} />;
-
 }
 
 // A panel in the split-file view with a tab-switcher header
@@ -1132,10 +1126,7 @@ function App() {
 
         <div className="toolbar-center">
           {activeTab?.type === "markdown" && !splitLayout.enabled && (
-            <Toolbar
-              mode={activeTab.mode}
-              onModeChange={handleModeChange}
-            />
+            <Toolbar mode={activeTab.mode} onModeChange={handleModeChange} />
           )}
         </div>
 

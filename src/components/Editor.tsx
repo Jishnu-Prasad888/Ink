@@ -134,6 +134,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   const shortcuts = useSettingsStore((state) => state.shortcuts);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const initialCursorPosition = useRef(tab.cursorPosition);
+  const initialScrollPosition = useRef(tab.scrollPosition);
   const cursorUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSearchQuery = useRef(searchQuery);
 
@@ -157,6 +158,18 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
     persistCursor(view.state.selection.main.head);
   };
 
+  const handleCreateEditor = (view: EditorView) => {
+    if (initialCursorPosition.current !== undefined) {
+      view.dispatch({
+        selection: { anchor: initialCursorPosition.current },
+        scrollIntoView: initialScrollPosition.current === undefined,
+      });
+    }
+    if (initialScrollPosition.current !== undefined) {
+      view.scrollDOM.scrollTop = initialScrollPosition.current;
+    }
+  };
+
   useEffect(() => {
     const view = editorRef.current?.view;
     return () => {
@@ -169,26 +182,6 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
       }
     };
   }, [tab.id, updateTab]);
-
-  useEffect(() => {
-    if (editorRef.current && initialCursorPosition.current !== undefined) {
-      const view = editorRef.current.view;
-      if (view) {
-        view.dispatch({
-          selection: { anchor: initialCursorPosition.current },
-          scrollIntoView: true,
-        });
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const view = editorRef.current?.view;
-    if (view && tab.scrollPosition !== undefined) {
-      view.scrollDOM.scrollTop = tab.scrollPosition;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab.id]);
 
   useEffect(() => {
     if (searchQuery === lastSearchQuery.current) return;
@@ -223,6 +216,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
         ref={editorRef}
         value={tab.content ?? ""}
         onChange={handleChange}
+        onCreateEditor={handleCreateEditor}
         onFocus={handleFocus}
         onBlur={() => {
           const view = editorRef.current?.view;
