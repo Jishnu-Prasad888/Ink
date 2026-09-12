@@ -1,14 +1,15 @@
-//! GitHub remote workspace helpers — token keyring and GitHub REST API.
+//! GitHub remote workspace helpers — credential storage and GitHub REST API.
 
 use base64::Engine;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
-const KEYRING_SERVICE: &str = "ink";
-const KEYRING_ACCOUNT: &str = "github-pat";
-const KEYRING_CLIENT_ID_ACCOUNT: &str = "github-oauth-client-id";
+const GITHUB_AUTH_FILE: &str = "github-auth.json";
 
 const GITHUB_DEVICE_URL: &str = "https://github.com/login/device/code";
 const GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
@@ -17,77 +18,101 @@ const GITHUB_OAUTH_SCOPE: &str = "repo";
 const PERCENT_SEGMENT: &AsciiSet =
     &NON_ALPHANUMERIC.remove(b'.').remove(b'-').remove(b'_').remove(b'~');
 
-fn keyring_entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|e| e.to_string())
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct GithubAuth {
+    #[serde(default)]
+    client_id: String,
+    #[serde(default)]
+    token: String,
 }
 
-fn keyring_client_id_entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_CLIENT_ID_ACCOUNT).map_err(|e| e.to_string())
+fn auth_file(dir: &Path) -> Result<PathBuf, String> {
+    fs::create_dir_all(dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
+    Ok(dir.join(GITHUB_AUTH_FILE))
 }
 
-pub fn set_oauth_client_id(client_id: String) -> Result<(), String> {
+fn load_auth(dir: &Path) -> Result<GithubAuth, String> {
+    let path = dir.join(GITHUB_AUTH_FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("GitHub credentials file is corrupted: {e}")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(GithubAuth::default()),
+        Err(e) => Err(format!("Failed to read GitHub credentials: {e}")),
+    }
+}
+
+fn save_auth(dir: &Path, auth: &GithubAuth) -> Result<(), String> {
+    let path = auth_file(dir)?;
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let json = serde_json::to_string_pretty(auth).map_err(|e| e.to_string())?;
+    let mut file = opts
+        .open(&path)
+        .map_err(|e| format!("Failed to write GitHub credentials: {e}"))?;
+    file.write_all(json.as_bytes())
+        .map_err(|e| format!("Failed to write GitHub credentials: {e}"))
+}
+
+pub fn set_oauth_client_id(dir: &Path, client_id: String) -> Result<(), String> {
     let trimmed = client_id.trim();
     if trimmed.is_empty() {
         return Err("OAuth App client id cannot be empty".into());
     }
-    keyring_client_id_entry()?
-        .set_password(trimmed)
-        .map_err(|e| e.to_string())
+    let mut auth = load_auth(dir)?;
+    auth.client_id = trimmed.to_string();
+    save_auth(dir, &auth)
 }
 
-pub fn get_oauth_client_id() -> Result<Option<String>, String> {
-    match keyring_client_id_entry()?.get_password() {
-        Ok(id) if !id.trim().is_empty() => Ok(Some(id)),
-        Ok(_) => Ok(None),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+pub fn get_oauth_client_id(dir: &Path) -> Result<Option<String>, String> {
+    let auth = load_auth(dir)?;
+    let id = auth.client_id;
+    Ok((!id.trim().is_empty()).then_some(id))
 }
 
-fn require_oauth_client_id() -> Result<String, String> {
-    get_oauth_client_id()?.ok_or_else(|| {
+fn require_oauth_client_id(dir: &Path) -> Result<String, String> {
+    get_oauth_client_id(dir)?.ok_or_else(|| {
         "No GitHub OAuth App client id is set. In Settings, add the client id of a GitHub OAuth App to enable \"Sign in with GitHub\"."
             .to_string()
     })
 }
 
-pub fn has_oauth_client_id() -> Result<bool, String> {
-    Ok(get_oauth_client_id()?.is_some())
+pub fn has_oauth_client_id(dir: &Path) -> Result<bool, String> {
+    Ok(get_oauth_client_id(dir)?.is_some())
 }
 
-pub fn get_token() -> Result<Option<String>, String> {
-    match keyring_entry()?.get_password() {
-        Ok(token) if !token.trim().is_empty() => Ok(Some(token)),
-        Ok(_) => Ok(None),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+pub fn get_token(dir: &Path) -> Result<Option<String>, String> {
+    let auth = load_auth(dir)?;
+    let token = auth.token;
+    Ok((!token.trim().is_empty()).then_some(token))
 }
 
-pub fn set_token(token: String) -> Result<(), String> {
+pub fn set_token(dir: &Path, token: String) -> Result<(), String> {
     let trimmed = token.trim();
     if trimmed.is_empty() {
         return Err("Token cannot be empty".into());
     }
-    keyring_entry()?
-        .set_password(trimmed)
-        .map_err(|e| e.to_string())
+    let mut auth = load_auth(dir)?;
+    auth.token = trimmed.to_string();
+    save_auth(dir, &auth)
 }
 
-pub fn clear_token() -> Result<(), String> {
-    match keyring_entry()?.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e.to_string()),
-    }
+pub fn clear_token(dir: &Path) -> Result<(), String> {
+    let mut auth = load_auth(dir)?;
+    auth.token = String::new();
+    save_auth(dir, &auth)
 }
 
-pub fn has_token() -> Result<bool, String> {
-    Ok(get_token()?.is_some())
+pub fn has_token(dir: &Path) -> Result<bool, String> {
+    Ok(get_token(dir)?.is_some())
 }
 
-pub fn validate_token() -> Result<String, String> {
-    let token = get_token()?.ok_or_else(|| {
+pub fn validate_token(dir: &Path) -> Result<String, String> {
+    let token = get_token(dir)?.ok_or_else(|| {
         "No GitHub token saved. Sign in with GitHub in Settings.".to_string()
     })?;
     if token.len() < 8 {
@@ -116,8 +141,8 @@ pub struct DeviceAuthStatus {
 }
 
 /// Starts the GitHub OAuth device flow and returns the user code to display.
-pub async fn start_device_auth() -> Result<DeviceAuthResponse, String> {
-    let client_id = require_oauth_client_id()?;
+pub async fn start_device_auth(dir: &Path) -> Result<DeviceAuthResponse, String> {
+    let client_id = require_oauth_client_id(dir)?;
     let client = build_client()?;
     let body = serde_json::json!({
         "client_id": client_id,
@@ -164,8 +189,8 @@ pub async fn start_device_auth() -> Result<DeviceAuthResponse, String> {
 }
 
 /// Polls GitHub until the device code is authorized, then stores the token.
-pub async fn poll_device_auth(device_code: String) -> Result<DeviceAuthStatus, String> {
-    let client_id = require_oauth_client_id()?;
+pub async fn poll_device_auth(dir: &Path, device_code: String) -> Result<DeviceAuthStatus, String> {
+    let client_id = require_oauth_client_id(dir)?;
     let client = build_client()?;
     let body = serde_json::json!({
         "client_id": client_id,
@@ -190,7 +215,7 @@ pub async fn poll_device_auth(device_code: String) -> Result<DeviceAuthStatus, S
     }
     let json: Value = serde_json::from_str(&text).map_err(|_| text)?;
     if let Some(access_token) = json["access_token"].as_str() {
-        set_token(access_token.to_string())?;
+        set_token(dir, access_token.to_string())?;
         return Ok(DeviceAuthStatus {
             authorized: true,
             code: "authorized".into(),
@@ -334,10 +359,10 @@ fn is_supported_file(name: &str) -> bool {
     lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".txt")
 }
 
-pub async fn open_repo(input: String) -> Result<RepoInfo, String> {
+pub async fn open_repo(dir: &Path, input: String) -> Result<RepoInfo, String> {
     let (owner, repo) = parse_github_repo(&input)?;
     let client = build_client()?;
-    let token = get_token()?;
+    let token = get_token(dir)?;
     let url = api_url(&owner, &repo, "");
     let json = gh_request(&client, reqwest::Method::GET, &url, token.as_deref(), None).await?;
     let default_branch = json
@@ -357,13 +382,14 @@ pub async fn open_repo(input: String) -> Result<RepoInfo, String> {
 }
 
 pub async fn list_dir(
+    dir: &Path,
     owner: String,
     repo: String,
     path: String,
     branch: String,
 ) -> Result<Vec<TreeEntry>, String> {
     let client = build_client()?;
-    let token = get_token()?;
+    let token = get_token(dir)?;
     let encoded = if path.is_empty() {
         String::new()
     } else {
@@ -405,13 +431,14 @@ pub async fn list_dir(
 }
 
 pub async fn read_file(
+    dir: &Path,
     owner: String,
     repo: String,
     branch: String,
     path: String,
 ) -> Result<RemoteFile, String> {
     let client = build_client()?;
-    let token = get_token()?;
+    let token = get_token(dir)?;
     let encoded = encode_path(&path);
     let url = format!(
         "{base}?ref={branch}",
@@ -451,6 +478,7 @@ pub async fn read_file(
 }
 
 pub async fn write_file(
+    dir: &Path,
     owner: String,
     repo: String,
     branch: String,
@@ -460,7 +488,7 @@ pub async fn write_file(
     sha: Option<String>,
 ) -> Result<WriteResult, String> {
     let client = build_client()?;
-    let token = get_token()?;
+    let token = get_token(dir)?;
     let encoded = encode_path(&path);
     let url = api_url(&owner, &repo, &format!("contents/{encoded}"));
     let b64 = base64::engine::general_purpose::STANDARD.encode(content.as_bytes());
@@ -549,5 +577,29 @@ mod tests {
             parse_github_repo("git@github.com:octocat/Hello-World.git").unwrap(),
             ("octocat".into(), "Hello-World".into())
         );
+    }
+
+    #[test]
+    fn persists_client_id_and_token_to_config_dir() {
+        let dir = std::env::temp_dir().join(format!("ink-auth-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(has_token(&dir).unwrap(), false);
+        assert_eq!(has_oauth_client_id(&dir).unwrap(), false);
+
+        set_oauth_client_id(&dir, "Iv1.abc123".into()).unwrap();
+        set_token(&dir, "ghp_some_token".into()).unwrap();
+
+        assert_eq!(
+            get_oauth_client_id(&dir).unwrap().as_deref(),
+            Some("Iv1.abc123")
+        );
+        assert_eq!(get_token(&dir).unwrap().as_deref(), Some("ghp_some_token"));
+
+        clear_token(&dir).unwrap();
+        assert_eq!(has_token(&dir).unwrap(), false);
+        assert_eq!(has_oauth_client_id(&dir).unwrap(), true);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

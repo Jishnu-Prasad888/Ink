@@ -252,7 +252,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <p>
                   Sign in once with GitHub to open repositories and commit files. Saving a file in
                   an open remote repo commits it directly to that repo&apos;s branch. Access is
-                  stored in the OS keychain, not in settings files.
+                  stored privately on this device, not in settings files.
                 </p>
               </div>
             </div>

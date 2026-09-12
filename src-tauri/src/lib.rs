@@ -507,75 +507,96 @@ async fn open_folder_dialog(app: AppHandle) -> Result<Vec<String>, String> {
     }
 }
 
-#[tauri::command]
-fn github_set_token(token: String) -> Result<(), String> {
-    github_remote::set_token(token)
+fn github_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_config_dir().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn github_has_token() -> Result<bool, String> {
-    github_remote::has_token()
+fn github_set_token(app: AppHandle, token: String) -> Result<(), String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::set_token(&dir, token)
 }
 
 #[tauri::command]
-fn github_clear_token() -> Result<(), String> {
-    github_remote::clear_token()
+fn github_has_token(app: AppHandle) -> Result<bool, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::has_token(&dir)
 }
 
 #[tauri::command]
-fn github_validate_token() -> Result<String, String> {
-    github_remote::validate_token()
+fn github_clear_token(app: AppHandle) -> Result<(), String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::clear_token(&dir)
 }
 
 #[tauri::command]
-fn github_set_oauth_client_id(client_id: String) -> Result<(), String> {
-    github_remote::set_oauth_client_id(client_id)
+fn github_validate_token(app: AppHandle) -> Result<String, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::validate_token(&dir)
 }
 
 #[tauri::command]
-fn github_has_oauth_client_id() -> Result<bool, String> {
-    github_remote::has_oauth_client_id()
+fn github_set_oauth_client_id(app: AppHandle, client_id: String) -> Result<(), String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::set_oauth_client_id(&dir, client_id)
 }
 
 #[tauri::command]
-async fn github_start_device_auth() -> Result<github_remote::DeviceAuthResponse, String> {
-    github_remote::start_device_auth().await
+fn github_has_oauth_client_id(app: AppHandle) -> Result<bool, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::has_oauth_client_id(&dir)
+}
+
+#[tauri::command]
+async fn github_start_device_auth(
+    app: AppHandle,
+) -> Result<github_remote::DeviceAuthResponse, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::start_device_auth(&dir).await
 }
 
 #[tauri::command]
 async fn github_poll_device_auth(
+    app: AppHandle,
     device_code: String,
 ) -> Result<github_remote::DeviceAuthStatus, String> {
-    github_remote::poll_device_auth(device_code).await
+    let dir = github_config_dir(&app)?;
+    github_remote::poll_device_auth(&dir, device_code).await
 }
 
 #[tauri::command]
-async fn github_open_repo(input: String) -> Result<github_remote::RepoInfo, String> {
-    github_remote::open_repo(input).await
+async fn github_open_repo(app: AppHandle, input: String) -> Result<github_remote::RepoInfo, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::open_repo(&dir, input).await
 }
 
 #[tauri::command]
 async fn github_list_dir(
+    app: AppHandle,
     owner: String,
     repo: String,
     path: String,
     branch: String,
 ) -> Result<Vec<github_remote::TreeEntry>, String> {
-    github_remote::list_dir(owner, repo, path, branch).await
+    let dir = github_config_dir(&app)?;
+    github_remote::list_dir(&dir, owner, repo, path, branch).await
 }
 
 #[tauri::command]
 async fn github_read_file(
+    app: AppHandle,
     owner: String,
     repo: String,
     branch: String,
     path: String,
 ) -> Result<github_remote::RemoteFile, String> {
-    github_remote::read_file(owner, repo, branch, path).await
+    let dir = github_config_dir(&app)?;
+    github_remote::read_file(&dir, owner, repo, branch, path).await
 }
 
 #[tauri::command]
 async fn github_write_file(
+    app: AppHandle,
     owner: String,
     repo: String,
     branch: String,
@@ -584,5 +605,6 @@ async fn github_write_file(
     message: String,
     sha: Option<String>,
 ) -> Result<github_remote::WriteResult, String> {
-    github_remote::write_file(owner, repo, branch, path, content, message, sha).await
+    let dir = github_config_dir(&app)?;
+    github_remote::write_file(&dir, owner, repo, branch, path, content, message, sha).await
 }
