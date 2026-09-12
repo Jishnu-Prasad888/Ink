@@ -9,9 +9,15 @@ import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import { Tab } from "./components/Tab";
 import { SettingsModal } from "./components/SettingsModal";
 import { ExportPdfModal } from "./components/ExportPdfModal";
+import { OpenRemoteModal } from "./components/OpenRemoteModal";
 import { useTabStore } from "./store/tabStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useRecentFilesStore } from "./store/recentFilesStore";
+import {
+  isPathUnderRemoteRoot,
+  relativePathUnderRoot,
+  useRemoteWorkspaceStore,
+} from "./store/remoteWorkspaceStore";
 import { formatShortcut, matchesShortcut } from "./utils/shortcuts";
 import { exportMarkdownToPdf } from "./utils/pdfExport";
 import { listen } from "@tauri-apps/api/event";
@@ -330,7 +336,10 @@ function App() {
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const { theme, appFont, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
   const { recentFiles, addRecentFile, removeRecentFile, clearRecentFiles } = useRecentFilesStore();
+  const activeRemote = useRemoteWorkspaceStore((state) => state.activeRemote);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openRemoteOpen, setOpenRemoteOpen] = useState(false);
+  const [externalRootPath, setExternalRootPath] = useState<string | null>(null);
   const [exportTabId, setExportTabId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -537,7 +546,48 @@ function App() {
           diskFingerprint: result.fingerprint,
         });
         addRecentFile(savePath, fileName);
-        showToast(`Saved ${fileName}`);
+
+        const { activeRemote, autoCommitOnSave, autoPushOnCommit } =
+          useRemoteWorkspaceStore.getState();
+        if (
+          activeRemote &&
+          autoCommitOnSave &&
+          isPathUnderRemoteRoot(savePath, activeRemote.rootPath)
+        ) {
+          const relative = relativePathUnderRoot(savePath, activeRemote.rootPath);
+          try {
+            const commitResult = await invoke<{
+              committed: boolean;
+              skippedEmpty: boolean;
+              message: string;
+            }>("git_commit_paths", {
+              repoPath: activeRemote.rootPath,
+              paths: [savePath],
+              message: `Update ${relative}`,
+            });
+            if (commitResult.committed) {
+              if (autoPushOnCommit) {
+                try {
+                  await invoke("git_push", { repoPath: activeRemote.rootPath });
+                  showToast(`Saved and pushed ${relative}`);
+                } catch (pushError) {
+                  showToast(
+                    `Saved and committed ${relative}, but push failed: ${String(pushError)}`,
+                  );
+                }
+              } else {
+                showToast(`Saved and committed ${relative}`);
+              }
+            } else {
+              showToast(`Saved ${fileName}`);
+            }
+          } catch (commitError) {
+            showToast(`Saved ${fileName}, but commit failed: ${String(commitError)}`);
+          }
+        } else {
+          showToast(`Saved ${fileName}`);
+        }
+
         return true;
       } catch (error) {
         showToast(`Could not save ${tab.fileName}: ${String(error)}`);
@@ -995,6 +1045,13 @@ function App() {
       run: () => void handleOpenFile(),
     },
     {
+      label: "File: Open Remote…",
+      run: () => {
+        setSidebarOpen(true);
+        setOpenRemoteOpen(true);
+      },
+    },
+    {
       label: "File: Save",
       shortcut: formatShortcut(shortcuts["file.save"]),
       run: () => void handleSaveFile(),
@@ -1191,7 +1248,13 @@ function App() {
 
       {/* ── Main layout ── */}
       <main className="main-layout">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onError={showToast} />
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onError={showToast}
+          onRequestOpenRemote={() => setOpenRemoteOpen(true)}
+          externalRootPath={externalRootPath}
+        />
         <div className="content-wrapper">
           {!splitLayout.enabled && <TabBar onRequestClose={(id) => requestClose([id])} />}
           <div
@@ -1211,6 +1274,11 @@ function App() {
             ? `${activeTab.fileName}${activeTab.isDirty ? " - Unsaved" : " - Saved"}`
             : "No document open"}
         </span>
+        {activeRemote && (
+          <span className="status-remote" title={activeRemote.url}>
+            {activeRemote.owner}/{activeRemote.repo}
+          </span>
+        )}
         {activeTab?.type === "markdown" && (
           <span className="status-metrics">
             Ln {line}, Col {column} | {wordCount} words | Markdown
@@ -1258,6 +1326,22 @@ function App() {
 
       {settingsOpen && <SettingsModal isOpen onClose={() => setSettingsOpen(false)} />}
 
+      {openRemoteOpen && (
+        <OpenRemoteModal
+          isOpen
+          onClose={() => setOpenRemoteOpen(false)}
+          onError={showToast}
+          onOpened={(remote, reusedExisting) => {
+            setSidebarOpen(true);
+            setExternalRootPath(remote.rootPath);
+            showToast(
+              reusedExisting
+                ? `Opened ${remote.owner}/${remote.repo}`
+                : `Cloned ${remote.owner}/${remote.repo}`,
+            );
+          }}
+        />
+      )}
       {exportTab && (
         <ExportPdfModal
           fileName={exportTab.fileName}

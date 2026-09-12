@@ -1249,6 +1249,7 @@ textarea,
 
 .sidebar-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
@@ -1256,7 +1257,8 @@ textarea,
 }
 
 .sidebar-btn {
-  flex: 1;
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
   padding: 6px 12px;
   font-size: 12px;
   font-family: var(--font-ui);
@@ -1488,6 +1490,15 @@ textarea,
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.status-remote {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .status-metrics {
@@ -1956,6 +1967,112 @@ textarea,
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
+}
+
+.settings-status-pill {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.settings-status-pill.connected {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.github-token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+
+.github-token-form label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.github-token-form input,
+.open-remote-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  color: var(--text-primary);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font: 13px var(--font-ui);
+}
+
+.github-token-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-primary-btn {
+  min-height: 34px;
+  padding: 6px 14px;
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.settings-link-btn {
+  min-height: 34px;
+  padding: 6px 10px;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.open-remote-dialog p {
+  margin-bottom: 12px;
+}
+
+.open-remote-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.open-remote-hint {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.open-remote-error {
+  margin-top: 10px;
+  color: var(--danger);
+  font-size: 12.5px;
 }
 
 .font-setting {

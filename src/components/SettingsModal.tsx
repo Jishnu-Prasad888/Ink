@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore, type AppFont, type ColorTheme } from "../store/settingsStore";
+import { useRemoteWorkspaceStore } from "../store/remoteWorkspaceStore";
 import {
   defaultShortcuts,
   formatShortcut,
@@ -42,8 +45,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     resetShortcut,
     resetShortcuts,
   } = useSettingsStore();
+  const {
+    autoCommitOnSave,
+    autoPushOnCommit,
+    setAutoCommitOnSave,
+    setAutoPushOnCommit,
+    activeRemote,
+  } = useRemoteWorkspaceStore();
   const [recording, setRecording] = useState<ShortcutId | null>(null);
   const [shortcutError, setShortcutError] = useState("");
+  const [tokenInput, setTokenInput] = useState("");
+  const [hasToken, setHasToken] = useState(false);
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [tokenMessage, setTokenMessage] = useState("");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
 
@@ -51,7 +65,49 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (isOpen) closeButtonRef.current?.focus();
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    void invoke<boolean>("github_has_token")
+      .then(setHasToken)
+      .catch(() => setHasToken(false));
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const refreshTokenStatus = async () => {
+    const present = await invoke<boolean>("github_has_token");
+    setHasToken(present);
+  };
+
+  const saveToken = async () => {
+    setTokenBusy(true);
+    setTokenMessage("");
+    try {
+      await invoke("github_set_token", { token: tokenInput });
+      const status = await invoke<string>("github_validate_token");
+      setTokenInput("");
+      await refreshTokenStatus();
+      setTokenMessage(status);
+    } catch (error) {
+      setTokenMessage(String(error));
+    } finally {
+      setTokenBusy(false);
+    }
+  };
+
+  const clearToken = async () => {
+    setTokenBusy(true);
+    setTokenMessage("");
+    try {
+      await invoke("github_clear_token");
+      await refreshTokenStatus();
+      setTokenMessage("Token removed.");
+    } catch (error) {
+      setTokenMessage(String(error));
+    } finally {
+      setTokenBusy(false);
+    }
+  };
 
   const recordShortcut = (event: React.KeyboardEvent, id: ShortcutId) => {
     event.preventDefault();
@@ -91,7 +147,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         if (event.key !== "Tab" || !dialogRef.current) return;
         const focusable = Array.from(
           dialogRef.current.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
+            'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
           ),
         );
         const first = focusable[0];
@@ -188,6 +244,106 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <option value="landscape">Landscape</option>
               </select>
             </div>
+          </section>
+
+          <section className="settings-section" aria-labelledby="github-heading">
+            <div className="settings-section-heading">
+              <div>
+                <h3 id="github-heading">GitHub</h3>
+                <p>
+                  Connect a Personal Access Token for private repos and push. Tokens are stored in
+                  the OS keychain, not in settings files.
+                </p>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <h3>Token status</h3>
+                <p>{hasToken ? "A GitHub token is saved on this device." : "No token saved."}</p>
+              </div>
+              <span className={`settings-status-pill${hasToken ? " connected" : ""}`}>
+                {hasToken ? "Connected" : "Not connected"}
+              </span>
+            </div>
+            <div className="github-token-form">
+              <label htmlFor="github-token-input">Personal Access Token</label>
+              <input
+                id="github-token-input"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={tokenInput}
+                disabled={tokenBusy}
+                placeholder="ghp_… or github_pat_…"
+                onChange={(event) => setTokenInput(event.target.value)}
+              />
+              <div className="github-token-actions">
+                <button
+                  type="button"
+                  className="settings-primary-btn"
+                  disabled={tokenBusy || !tokenInput.trim()}
+                  onClick={() => void saveToken()}
+                >
+                  Save token
+                </button>
+                <button
+                  type="button"
+                  disabled={tokenBusy || !hasToken}
+                  onClick={() => void clearToken()}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="settings-link-btn"
+                  onClick={() =>
+                    void openUrl("https://github.com/settings/tokens").catch(() => undefined)
+                  }
+                >
+                  Create token on GitHub
+                </button>
+              </div>
+              {tokenMessage && (
+                <p className="settings-error" role="status">
+                  {tokenMessage}
+                </p>
+              )}
+            </div>
+            <div className="settings-row">
+              <div>
+                <h3>Commit on save</h3>
+                <p>
+                  When a remote workspace is open, create a git commit after each successful save.
+                </p>
+              </div>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={autoCommitOnSave}
+                  onChange={(event) => setAutoCommitOnSave(event.target.checked)}
+                />
+                <span>{autoCommitOnSave ? "On" : "Off"}</span>
+              </label>
+            </div>
+            <div className="settings-row">
+              <div>
+                <h3>Push after commit</h3>
+                <p>After auto-commit, push to GitHub. Requires a token with push access.</p>
+              </div>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={autoPushOnCommit}
+                  onChange={(event) => setAutoPushOnCommit(event.target.checked)}
+                />
+                <span>{autoPushOnCommit ? "On" : "Off"}</span>
+              </label>
+            </div>
+            {activeRemote && (
+              <p className="open-remote-hint">
+                Active remote: {activeRemote.owner}/{activeRemote.repo} ({activeRemote.branch})
+              </p>
+            )}
           </section>
 
           <details className="settings-section shortcuts-section">

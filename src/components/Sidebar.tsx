@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useTabStore } from "../store/tabStore";
 import { useRecentFilesStore } from "../store/recentFilesStore";
+import { useRemoteWorkspaceStore } from "../store/remoteWorkspaceStore";
 import {
   ChevronIcon,
   CloseFolderIcon,
@@ -27,20 +28,40 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onError: (message: string) => void;
+  onRequestOpenRemote?: () => void;
+  /** When set, Explorer opens this folder as the workspace root. */
+  externalRootPath?: string | null;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  isOpen,
+  onClose,
+  onError,
+  onRequestOpenRemote,
+  externalRootPath,
+}) => {
   const [rootFolder, setRootFolder] = useState<string | null>(() =>
     localStorage.getItem("sidebar-root-folder"),
   );
   const [tree, setTree] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const requestGeneration = useRef(0);
+  const lastExternalRoot = useRef<string | null>(null);
   const addTab = useTabStore((state) => state.addTab);
   const addRecentFile = useRecentFilesStore((state) => state.addRecentFile);
+  const clearActiveRemoteIfRoot = useRemoteWorkspaceStore((state) => state.clearActiveRemoteIfRoot);
+  const setActiveRemote = useRemoteWorkspaceStore((state) => state.setActiveRemote);
   const activeFilePath = useTabStore(
     (state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.filePath,
   );
+
+  const openWorkspaceRoot = useCallback((folderPath: string) => {
+    requestGeneration.current += 1;
+    setTree([]);
+    setExpanded(new Set());
+    setRootFolder(folderPath);
+    localStorage.setItem("sidebar-root-folder", folderPath);
+  }, []);
 
   const buildTree = useCallback(
     async (folderPath: string): Promise<FileNode[]> => {
@@ -100,15 +121,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
     };
   }, [buildTree, onError, rootFolder]);
 
+  useEffect(() => {
+    if (!externalRootPath) return;
+    if (lastExternalRoot.current === externalRootPath) return;
+    lastExternalRoot.current = externalRootPath;
+    openWorkspaceRoot(externalRootPath);
+  }, [externalRootPath, openWorkspaceRoot]);
+
   const handleOpenFolder = async () => {
     try {
       const selected: string[] = await invoke("open_folder_dialog");
       if (selected.length > 0) {
-        requestGeneration.current += 1;
-        setTree([]);
-        setExpanded(new Set());
-        setRootFolder(selected[0]);
-        localStorage.setItem("sidebar-root-folder", selected[0]);
+        setActiveRemote(null);
+        openWorkspaceRoot(selected[0]);
       }
     } catch (error) {
       onError(`Could not open folder: ${String(error)}`);
@@ -116,6 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
   };
 
   const handleCloseFolder = () => {
+    clearActiveRemoteIfRoot(rootFolder);
     requestGeneration.current += 1;
     setRootFolder(null);
     setTree([]);
@@ -328,6 +354,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
         <button onClick={handleOpenFolder} className="sidebar-btn">
           Open Folder
         </button>
+        {onRequestOpenRemote && (
+          <button onClick={onRequestOpenRemote} className="sidebar-btn">
+            Open Remote
+          </button>
+        )}
         {rootFolder && (
           <>
             <button

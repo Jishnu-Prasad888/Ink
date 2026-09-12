@@ -6,6 +6,8 @@ use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 
+mod github_remote;
+
 /// Opens a file-picker dialog for documents supported by the workspace.
 #[tauri::command]
 async fn open_file_dialog(app: AppHandle) -> Result<Vec<String>, String> {
@@ -298,6 +300,14 @@ pub fn run() {
             delete_item,
             read_file_binary,
             open_folder_dialog,
+            github_set_token,
+            github_has_token,
+            github_clear_token,
+            github_validate_token,
+            clone_github_repo,
+            git_commit_paths,
+            git_push,
+            get_remote_repo_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -315,6 +325,11 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
         let file_type = entry.file_type().map_err(|e| e.to_string())?;
         let name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path().to_string_lossy().to_string();
+
+        // Hide VCS metadata from the Explorer.
+        if name == ".git" {
+            continue;
+        }
 
         // Only show directories and markdown/PDF files
         let lower_name = name.to_lowercase();
@@ -486,4 +501,48 @@ async fn open_folder_dialog(app: AppHandle) -> Result<Vec<String>, String> {
             Ok(vec![])
         }
     }
+}
+
+#[tauri::command]
+fn github_set_token(token: String) -> Result<(), String> {
+    github_remote::set_token(token)
+}
+
+#[tauri::command]
+fn github_has_token() -> Result<bool, String> {
+    github_remote::has_token()
+}
+
+#[tauri::command]
+fn github_clear_token() -> Result<(), String> {
+    github_remote::clear_token()
+}
+
+#[tauri::command]
+fn github_validate_token() -> Result<String, String> {
+    github_remote::validate_token()
+}
+
+#[tauri::command]
+fn clone_github_repo(app: AppHandle, input: String) -> Result<github_remote::CloneResult, String> {
+    github_remote::clone_github_repo(app, input)
+}
+
+#[tauri::command]
+fn git_commit_paths(
+    repo_path: String,
+    paths: Vec<String>,
+    message: String,
+) -> Result<github_remote::CommitResult, String> {
+    github_remote::git_commit_paths(repo_path, paths, message)
+}
+
+#[tauri::command]
+fn git_push(repo_path: String) -> Result<(), String> {
+    github_remote::git_push(repo_path)
+}
+
+#[tauri::command]
+fn get_remote_repo_status(repo_path: String) -> Result<github_remote::RemoteStatus, String> {
+    github_remote::get_remote_repo_status(repo_path)
 }
