@@ -1,41 +1,16 @@
-//! GitHub remote workspace helpers: token keyring, clone, commit, push.
+//! GitHub remote workspace helpers — token keyring and GitHub REST API.
 
+use base64::Engine;
+use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
+use reqwest::Client;
 use serde::Serialize;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use tauri::{AppHandle, Manager};
+use serde_json::Value;
 
 const KEYRING_SERVICE: &str = "ink";
 const KEYRING_ACCOUNT: &str = "github-pat";
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CloneResult {
-    pub root_path: String,
-    pub owner: String,
-    pub repo: String,
-    pub url: String,
-    pub branch: String,
-    pub reused_existing: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitResult {
-    pub committed: bool,
-    pub message: String,
-    pub skipped_empty: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteStatus {
-    pub branch: String,
-    pub dirty: bool,
-    pub owner: String,
-    pub repo: String,
-}
+const PERCENT_SEGMENT: &AsciiSet =
+    &NON_ALPHANUMERIC.remove(b'.').remove(b'-').remove(b'_').remove(b'~');
 
 fn keyring_entry() -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|e| e.to_string())
@@ -72,69 +47,292 @@ pub fn has_token() -> Result<bool, String> {
     Ok(get_token()?.is_some())
 }
 
-fn ensure_git() -> Result<(), String> {
-    let output = Command::new("git").arg("--version").output().map_err(|_| {
-        "Git is not installed or not on PATH. Install Git to use Open Remote.".to_string()
+pub fn validate_token() -> Result<String, String> {
+    let token = get_token()?.ok_or_else(|| {
+        "No GitHub token saved. Add a Personal Access Token in Settings.".to_string()
     })?;
-    if !output.status.success() {
-        return Err("Git is not available on this system.".into());
+    if token.len() < 8 {
+        return Err("Token looks too short. Paste a full GitHub Personal Access Token.".into());
     }
-    Ok(())
+    Ok("Token is saved. It will be verified when you open a repo.".into())
 }
 
-fn run_git(repo: Option<&Path>, args: &[&str]) -> Result<std::process::Output, String> {
-    let mut cmd = Command::new("git");
-    if let Some(path) = repo {
-        cmd.arg("-C").arg(path);
-    }
-    cmd.args(args);
-    cmd.output().map_err(|e| format!("Failed to run git: {e}"))
+fn clean_remote_url(owner: &str, repo: &str) -> String {
+    format!("https://github.com/{owner}/{repo}")
 }
 
-fn run_git_checked(repo: Option<&Path>, args: &[&str]) -> Result<String, String> {
-    let output = run_git(repo, args)?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+fn api_url(owner: &str, repo: &str, rest: &str) -> String {
+    format!("https://api.github.com/repos/{owner}/{repo}/{rest}")
+}
+
+fn encode_path(path: &str) -> String {
+    path.split('/')
+        .map(|seg| utf8_percent_encode(seg, PERCENT_SEGMENT).to_string())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn build_client() -> Result<Client, String> {
+    Client::builder()
+        .user_agent("Ink/1.3.1")
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))
+}
+
+async fn gh_request(
+    client: &Client,
+    method: reqwest::Method,
+    url: &str,
+    token: Option<&str>,
+    body: Option<Value>,
+) -> Result<Value, String> {
+    let mut req = client.request(method.clone(), url);
+    if let Some(token) = token {
+        req = req.header("Authorization", format!("Bearer {token}"));
+    }
+    if let Some(body) = body {
+        req = req.json(&body);
+    }
+    let resp = req.send().await.map_err(|e| {
+        let lower = e.to_string().to_lowercase();
+        if lower.contains("connect") || lower.contains("dns") {
+            format!("Network error: {e}")
+        } else {
+            e.to_string()
+        }
+    })?;
+    let status = resp.status();
+    let status_code = status.as_u16();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if status.is_success() {
+        if text.trim().is_empty() || text.trim() == "{}" {
+            Ok(serde_json::json!({}))
+        } else {
+            serde_json::from_str(&text).map_err(|_| text)
+        }
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let detail = if !stderr.is_empty() { stderr } else { stdout };
-        Err(map_git_error(&detail))
+        let lower = text.to_lowercase();
+        let message = serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|v| v["message"].as_str().map(String::from))
+            .unwrap_or_else(|| text.clone());
+        if status_code == 401 || status_code == 403 || lower.contains("bad credentials") {
+            Err(format!(
+                "GitHub authentication failed. Check your token in Settings. ({message})"
+            ))
+        } else if status_code == 404 {
+            Err(format!("Repository or file not found. ({message})"))
+        } else if status_code == 409 {
+            Err("Conflict: the file changed on GitHub. Reopen the file and try again.".into())
+        } else if status_code == 422 {
+            Err(format!("GitHub rejected the request. ({message})"))
+        } else {
+            Err(format!("GitHub API error {status_code}: {message}"))
+        }
     }
 }
 
-fn map_git_error(detail: &str) -> String {
-    let lower = detail.to_lowercase();
-    if lower.contains("authentication failed")
-        || lower.contains("invalid username")
-        || lower.contains("could not read username")
-        || lower.contains("401")
-        || lower.contains("403")
-        || lower.contains("access denied")
-        || lower.contains("repository not found")
-    {
-        format!(
-            "Token missing or lacks repo access. Add a GitHub PAT with repo scope in Settings. ({detail})"
-        )
-    } else if detail.is_empty() {
-        "Git command failed".into()
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoInfo {
+    pub owner: String,
+    pub repo: String,
+    pub url: String,
+    pub branch: String,
+    pub root_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreeEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteFile {
+    pub content: String,
+    pub sha: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteResult {
+    pub sha: String,
+    pub committed: bool,
+}
+
+fn is_supported_file(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.ends_with(".md") || lower.ends_with(".markdown") || lower.ends_with(".txt")
+}
+
+pub async fn open_repo(input: String) -> Result<RepoInfo, String> {
+    let (owner, repo) = parse_github_repo(&input)?;
+    let client = build_client()?;
+    let token = get_token()?;
+    let url = api_url(&owner, &repo, "");
+    let json = gh_request(&client, reqwest::Method::GET, &url, token.as_deref(), None).await?;
+    let default_branch = json
+        .get("default_branch")
+        .and_then(|v| v.as_str())
+        .unwrap_or("main")
+        .to_string();
+    let url = clean_remote_url(&owner, &repo);
+    let root_path = format!("github://{owner}/{repo}/{default_branch}");
+    Ok(RepoInfo {
+        owner,
+        repo,
+        url,
+        branch: default_branch,
+        root_path,
+    })
+}
+
+pub async fn list_dir(
+    owner: String,
+    repo: String,
+    path: String,
+    branch: String,
+) -> Result<Vec<TreeEntry>, String> {
+    let client = build_client()?;
+    let token = get_token()?;
+    let encoded = if path.is_empty() {
+        String::new()
     } else {
-        detail.to_string()
+        encode_path(&path)
+    };
+    let mut url = api_url(&owner, &repo, "contents");
+    if !encoded.is_empty() {
+        url = format!("{url}/{encoded}");
     }
+    url = format!("{url}?ref={}", &branch);
+    let json = gh_request(&client, reqwest::Method::GET, &url, token.as_deref(), None).await?;
+    let entries = json
+        .as_array()
+        .ok_or_else(|| "Unexpected response from GitHub".to_string())?;
+    let mut result = Vec::new();
+    for entry in entries {
+        let name = entry["name"].as_str().unwrap_or_default().to_string();
+        let entry_path = entry["path"].as_str().unwrap_or_default().to_string();
+        let entry_type = entry["type"].as_str().unwrap_or("file");
+        let is_dir = entry_type == "dir";
+        if is_dir || is_supported_file(&name) {
+            result.push(TreeEntry {
+                name,
+                path: entry_path,
+                is_dir,
+            });
+        }
+    }
+    result.sort_by(|a, b| {
+        if a.is_dir && !b.is_dir {
+            std::cmp::Ordering::Less
+        } else if !a.is_dir && b.is_dir {
+            std::cmp::Ordering::Greater
+        } else {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        }
+    });
+    Ok(result)
 }
 
-/// Parse `owner/repo`, HTTPS, or SSH GitHub URLs into (owner, repo).
+pub async fn read_file(
+    owner: String,
+    repo: String,
+    branch: String,
+    path: String,
+) -> Result<RemoteFile, String> {
+    let client = build_client()?;
+    let token = get_token()?;
+    let encoded = encode_path(&path);
+    let url = format!(
+        "{base}?ref={branch}",
+        base = api_url(&owner, &repo, &format!("contents/{encoded}")),
+    );
+    let json = gh_request(&client, reqwest::Method::GET, &url, token.as_deref(), None).await?;
+    let sha = json
+        .get("sha")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let size = json.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
+    let encoding = json
+        .get("encoding")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let content = if encoding == "base64" {
+        let b64 = json
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64.replace('\n', ""))
+            .map_err(|e| format!("Failed to decode content: {e}"))?;
+        String::from_utf8(bytes).map_err(|e| format!("File is not valid UTF-8: {e}"))?
+    } else {
+        json.get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    Ok(RemoteFile {
+        content,
+        sha,
+        size,
+    })
+}
+
+pub async fn write_file(
+    owner: String,
+    repo: String,
+    branch: String,
+    path: String,
+    content: String,
+    message: String,
+    sha: Option<String>,
+) -> Result<WriteResult, String> {
+    let client = build_client()?;
+    let token = get_token()?;
+    let encoded = encode_path(&path);
+    let url = format!(
+        "{base}?ref={branch}",
+        base = api_url(&owner, &repo, &format!("contents/{encoded}")),
+    );
+    let b64 = base64::engine::general_purpose::STANDARD.encode(content.as_bytes());
+    let mut body = serde_json::json!({
+        "message": message,
+        "content": b64,
+        "branch": branch,
+    });
+    if let Some(sha) = sha {
+        body["sha"] = Value::String(sha);
+    }
+    let json = gh_request(&client, reqwest::Method::PUT, &url, token.as_deref(), Some(body)).await?;
+    let new_sha = json
+        .pointer("/content/sha")
+        .or_else(|| json.pointer("/commit/sha"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Ok(WriteResult {
+        sha: new_sha,
+        committed: true,
+    })
+}
+
 pub fn parse_github_repo(input: &str) -> Result<(String, String), String> {
     let trimmed = input.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return Err("Enter a GitHub repository as owner/repo or a URL".into());
     }
-
     if let Some(rest) = trimmed.strip_prefix("git@github.com:") {
         let path = rest.trim_end_matches(".git");
         return split_owner_repo(path);
     }
-
     for prefix in [
         "https://github.com/",
         "http://github.com/",
@@ -148,7 +346,6 @@ pub fn parse_github_repo(input: &str) -> Result<(String, String), String> {
             return split_owner_repo(path);
         }
     }
-
     split_owner_repo(trimmed)
 }
 
@@ -162,266 +359,7 @@ fn split_owner_repo(path: &str) -> Result<(String, String), String> {
     if owner.is_empty() || repo.is_empty() {
         return Err("Invalid owner/repo".into());
     }
-    if owner.contains(':') || repo.contains(':') {
-        return Err("Invalid GitHub repository path".into());
-    }
     Ok((owner, repo))
-}
-
-fn clean_remote_url(owner: &str, repo: &str) -> String {
-    format!("https://github.com/{owner}/{repo}.git")
-}
-
-fn clone_dest(app: &AppHandle, owner: &str, repo: &str) -> Result<PathBuf, String> {
-    let app_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not resolve app data directory: {e}"))?;
-    let dest = app_data.join("remote-repos").join(owner).join(repo);
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    Ok(dest)
-}
-
-fn auth_header_value(token: &str) -> String {
-    use std::io::Write;
-    let mut buf = Vec::new();
-    write!(&mut buf, "x-access-token:{token}").ok();
-    format!("Authorization: Basic {}", base64_encode(&buf))
-}
-
-fn base64_encode(bytes: &[u8]) -> String {
-    const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in bytes.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = chunk.get(1).copied().unwrap_or(0) as u32;
-        let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        out.push(TABLE[((n >> 18) & 63) as usize] as char);
-        out.push(TABLE[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 {
-            TABLE[((n >> 6) & 63) as usize] as char
-        } else {
-            '='
-        });
-        out.push(if chunk.len() > 2 {
-            TABLE[(n & 63) as usize] as char
-        } else {
-            '='
-        });
-    }
-    out
-}
-
-fn run_git_with_token(
-    repo: Option<&Path>,
-    args: &[&str],
-    token: Option<&str>,
-) -> Result<String, String> {
-    let mut cmd = Command::new("git");
-    if let Some(path) = repo {
-        cmd.arg("-C").arg(path);
-    }
-    // Avoid interactive credential prompts in the desktop app.
-    cmd.env("GIT_TERMINAL_PROMPT", "0");
-    cmd.env("GCM_INTERACTIVE", "never");
-    if let Some(token) = token {
-        let header = auth_header_value(token);
-        cmd.args(["-c", &format!("http.extraHeader={header}")]);
-    }
-    cmd.args(args);
-    let output = cmd
-        .output()
-        .map_err(|e| format!("Failed to run git: {e}"))?;
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let detail = if !stderr.is_empty() { stderr } else { stdout };
-        Err(map_git_error(&detail))
-    }
-}
-
-fn current_branch(repo: &Path) -> Result<String, String> {
-    let branch = run_git_checked(Some(repo), &["rev-parse", "--abbrev-ref", "HEAD"])?;
-    if branch.is_empty() || branch == "HEAD" {
-        Ok("main".into())
-    } else {
-        Ok(branch)
-    }
-}
-
-fn ensure_commit_identity(repo: &Path) -> Result<(), String> {
-    let name = run_git(Some(repo), &["config", "user.name"])
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-    let email = run_git(Some(repo), &["config", "user.email"])
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-
-    if name.is_empty() {
-        run_git_checked(Some(repo), &["config", "user.name", "Ink"])?;
-    }
-    if email.is_empty() {
-        run_git_checked(Some(repo), &["config", "user.email", "ink@local"])?;
-    }
-    Ok(())
-}
-
-pub fn validate_token() -> Result<String, String> {
-    ensure_git()?;
-    let token = get_token()?.ok_or_else(|| {
-        "No GitHub token saved. Add a Personal Access Token in Settings.".to_string()
-    })?;
-    if token.len() < 8 {
-        return Err("Token looks too short. Paste a full GitHub Personal Access Token.".into());
-    }
-    Ok("Token is saved. It will be verified when you open a private repo or push.".into())
-}
-
-pub fn clone_github_repo(app: AppHandle, input: String) -> Result<CloneResult, String> {
-    ensure_git()?;
-    let (owner, repo) = parse_github_repo(&input)?;
-    let dest = clone_dest(&app, &owner, &repo)?;
-    let clean_url = clean_remote_url(&owner, &repo);
-    let token = get_token()?;
-
-    if dest.join(".git").is_dir() {
-        // Ensure remote URL has no embedded credentials.
-        let _ = run_git_checked(Some(&dest), &["remote", "set-url", "origin", &clean_url]);
-        let branch = current_branch(&dest).unwrap_or_else(|_| "main".into());
-        return Ok(CloneResult {
-            root_path: dest.to_string_lossy().to_string(),
-            owner,
-            repo,
-            url: clean_url,
-            branch,
-            reused_existing: true,
-        });
-    }
-
-    if dest.exists() {
-        let is_empty = fs::read_dir(&dest)
-            .map(|mut d| d.next().is_none())
-            .unwrap_or(false);
-        if !is_empty {
-            return Err(format!(
-                "Clone destination already exists and is not a git repo: {}",
-                dest.display()
-            ));
-        }
-        let _ = fs::remove_dir(&dest);
-    }
-
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-
-    run_git_with_token(
-        None,
-        &["clone", "--", &clean_url, &dest.to_string_lossy()],
-        token.as_deref(),
-    )?;
-
-    // Keep origin credential-free; auth is injected per-command.
-    let _ = run_git_checked(Some(&dest), &["remote", "set-url", "origin", &clean_url]);
-    let branch = current_branch(&dest).unwrap_or_else(|_| "main".into());
-
-    Ok(CloneResult {
-        root_path: dest.to_string_lossy().to_string(),
-        owner,
-        repo,
-        url: clean_url,
-        branch,
-        reused_existing: false,
-    })
-}
-
-pub fn git_commit_paths(
-    repo_path: String,
-    paths: Vec<String>,
-    message: String,
-) -> Result<CommitResult, String> {
-    ensure_git()?;
-    let repo = PathBuf::from(&repo_path);
-    if !repo.join(".git").is_dir() {
-        return Err("Not a git repository".into());
-    }
-    if paths.is_empty() {
-        return Err("No paths to commit".into());
-    }
-    let msg = message.trim();
-    if msg.is_empty() {
-        return Err("Commit message cannot be empty".into());
-    }
-
-    ensure_commit_identity(&repo)?;
-
-    let mut add_args = vec!["add", "--"];
-    let path_refs: Vec<&str> = paths.iter().map(|p| p.as_str()).collect();
-    add_args.extend(path_refs.iter().copied());
-    run_git_checked(Some(&repo), &add_args)?;
-
-    // Skip empty commits.
-    let status = run_git_checked(Some(&repo), &["status", "--porcelain"])?;
-    if status.is_empty() {
-        return Ok(CommitResult {
-            committed: false,
-            message: msg.to_string(),
-            skipped_empty: true,
-        });
-    }
-
-    run_git_checked(Some(&repo), &["commit", "-m", msg])?;
-    Ok(CommitResult {
-        committed: true,
-        message: msg.to_string(),
-        skipped_empty: false,
-    })
-}
-
-pub fn git_push(repo_path: String) -> Result<(), String> {
-    ensure_git()?;
-    let repo = PathBuf::from(&repo_path);
-    if !repo.join(".git").is_dir() {
-        return Err("Not a git repository".into());
-    }
-    let token = get_token()?;
-    run_git_with_token(Some(&repo), &["push"], token.as_deref())?;
-    Ok(())
-}
-
-pub fn get_remote_repo_status(repo_path: String) -> Result<RemoteStatus, String> {
-    ensure_git()?;
-    let repo = PathBuf::from(&repo_path);
-    if !repo.join(".git").is_dir() {
-        return Err("Not a git repository".into());
-    }
-    let branch = current_branch(&repo)?;
-    let status = run_git_checked(Some(&repo), &["status", "--porcelain"])?;
-    let remote_url =
-        run_git_checked(Some(&repo), &["remote", "get-url", "origin"]).unwrap_or_default();
-    let (owner, repo_name) = parse_github_repo(&remote_url).unwrap_or_else(|_| {
-        (
-            "?".into(),
-            repo.file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "repo".into()),
-        )
-    });
-    Ok(RemoteStatus {
-        branch,
-        dirty: !status.is_empty(),
-        owner,
-        repo: repo_name,
-    })
 }
 
 #[cfg(test)]

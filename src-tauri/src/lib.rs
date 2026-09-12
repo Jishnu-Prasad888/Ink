@@ -304,10 +304,10 @@ pub fn run() {
             github_has_token,
             github_clear_token,
             github_validate_token,
-            clone_github_repo,
-            git_commit_paths,
-            git_push,
-            get_remote_repo_status,
+            github_open_repo,
+            github_list_dir,
+            github_read_file,
+            github_write_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -524,25 +524,39 @@ fn github_validate_token() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn clone_github_repo(app: AppHandle, input: String) -> Result<github_remote::CloneResult, String> {
-    github_remote::clone_github_repo(app, input)
+async fn github_open_repo(input: String) -> Result<github_remote::RepoInfo, String> {
+    github_remote::open_repo(input).await
 }
 
 #[tauri::command]
-fn git_commit_paths(
-    repo_path: String,
-    paths: Vec<String>,
+async fn github_list_dir(
+    owner: String,
+    repo: String,
+    path: String,
+    branch: String,
+) -> Result<Vec<github_remote::TreeEntry>, String> {
+    github_remote::list_dir(owner, repo, path, branch).await
+}
+
+#[tauri::command]
+async fn github_read_file(
+    owner: String,
+    repo: String,
+    branch: String,
+    path: String,
+) -> Result<github_remote::RemoteFile, String> {
+    github_remote::read_file(owner, repo, branch, path).await
+}
+
+#[tauri::command]
+async fn github_write_file(
+    owner: String,
+    repo: String,
+    branch: String,
+    path: String,
+    content: String,
     message: String,
-) -> Result<github_remote::CommitResult, String> {
-    github_remote::git_commit_paths(repo_path, paths, message)
-}
-
-#[tauri::command]
-fn git_push(repo_path: String) -> Result<(), String> {
-    github_remote::git_push(repo_path)
-}
-
-#[tauri::command]
-fn get_remote_repo_status(repo_path: String) -> Result<github_remote::RemoteStatus, String> {
-    github_remote::get_remote_repo_status(repo_path)
+    sha: Option<String>,
+) -> Result<github_remote::WriteResult, String> {
+    github_remote::write_file(owner, repo, branch, path, content, message, sha).await
 }
