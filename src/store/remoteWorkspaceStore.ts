@@ -11,17 +11,29 @@ export interface ActiveRemote {
 
 interface RemoteWorkspaceStore {
   activeRemote: ActiveRemote | null;
-  autoCommitOnSave: boolean;
-  autoPushOnCommit: boolean;
   setActiveRemote: (remote: ActiveRemote | null) => void;
-  setAutoCommitOnSave: (value: boolean) => void;
-  setAutoPushOnCommit: (value: boolean) => void;
   clearActiveRemoteIfRoot: (rootPath: string | null) => void;
 }
 
 function pathsEqual(a: string, b: string): boolean {
   const normalize = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
   return normalize(a) === normalize(b);
+}
+
+/** True when a path uses the virtual GitHub scheme (no local file). */
+export function isRemotePath(path: string): boolean {
+  return path.startsWith("github://");
+}
+
+/** Splits a `github://owner/repo/branch/...path` virtual path into its parts. */
+export function parseRemotePath(
+  path: string,
+): { owner: string; repo: string; branch: string; relPath: string } | null {
+  if (!isRemotePath(path)) return null;
+  const rest = path.slice("github://".length);
+  const [owner, repo, branch, ...tail] = rest.split("/");
+  if (!owner || !repo || !branch) return null;
+  return { owner, repo, branch, relPath: tail.join("/") };
 }
 
 export function isPathUnderRemoteRoot(filePath: string, rootPath: string): boolean {
@@ -49,11 +61,7 @@ export const useRemoteWorkspaceStore = create<RemoteWorkspaceStore>()(
   persist(
     (set, get) => ({
       activeRemote: null,
-      autoCommitOnSave: true,
-      autoPushOnCommit: false,
       setActiveRemote: (activeRemote) => set({ activeRemote }),
-      setAutoCommitOnSave: (autoCommitOnSave) => set({ autoCommitOnSave }),
-      setAutoPushOnCommit: (autoPushOnCommit) => set({ autoPushOnCommit }),
       clearActiveRemoteIfRoot: (rootPath) => {
         const active = get().activeRemote;
         if (!active) return;
@@ -64,11 +72,9 @@ export const useRemoteWorkspaceStore = create<RemoteWorkspaceStore>()(
     }),
     {
       name: "ink-remote-workspace",
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         activeRemote: state.activeRemote,
-        autoCommitOnSave: state.autoCommitOnSave,
-        autoPushOnCommit: state.autoPushOnCommit,
       }),
     },
   ),

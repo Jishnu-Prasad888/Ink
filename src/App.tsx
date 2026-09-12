@@ -14,8 +14,8 @@ import { useTabStore } from "./store/tabStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useRecentFilesStore } from "./store/recentFilesStore";
 import {
-  isPathUnderRemoteRoot,
-  relativePathUnderRoot,
+  isRemotePath,
+  parseRemotePath,
   useRemoteWorkspaceStore,
 } from "./store/remoteWorkspaceStore";
 import { formatShortcut, matchesShortcut } from "./utils/shortcuts";
@@ -414,6 +414,43 @@ function App() {
         return;
       }
 
+      if (isRemotePath(filePath)) {
+        const remote = parseRemotePath(filePath);
+        if (!remote) {
+          showToast(`Could not open ${fileName}: invalid remote path`);
+          return;
+        }
+        const result = await invoke<{ content: string; sha: string; size: number }>(
+          "github_read_file",
+          {
+            owner: remote.owner,
+            repo: remote.repo,
+            branch: remote.branch,
+            path: remote.relPath,
+          },
+        );
+        const openedWhileReading = useTabStore
+          .getState()
+          .tabs.find((tab) => tab.filePath === filePath);
+        if (openedWhileReading) {
+          useTabStore.getState().setActiveTab(openedWhileReading.id);
+          addRecentFile(filePath, fileName);
+          return;
+        }
+        addTab({
+          filePath,
+          fileName,
+          content: result.content,
+          mode: "edit",
+          isDirty: false,
+          type: "markdown",
+          diskModifiedAt: Date.now(),
+          diskFingerprint: result.sha,
+        });
+        addRecentFile(filePath, fileName);
+        return;
+      }
+
       if (filePath.toLowerCase().endsWith(".pdf")) {
         addTab({
           filePath,
@@ -451,7 +488,7 @@ function App() {
       });
       addRecentFile(filePath, fileName);
     },
-    [addRecentFile, addTab],
+    [addRecentFile, addTab, showToast],
   );
 
   const handleOpenFile = useCallback(async () => {
@@ -466,7 +503,9 @@ function App() {
   const handleOpenRecentFile = useCallback(
     async (filePath: string) => {
       try {
-        await invoke("get_file_info", { path: filePath });
+        if (!isRemotePath(filePath)) {
+          await invoke("get_file_info", { path: filePath });
+        }
         await openPath(filePath);
       } catch (error) {
         removeRecentFile(filePath);
@@ -480,6 +519,38 @@ function App() {
     async (tabId: string, saveAs = false) => {
       const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
       if (!tab || tab.type !== "markdown" || tab.content === null) return false;
+
+      if (!saveAs && tab.filePath && isRemotePath(tab.filePath)) {
+        const remote = parseRemotePath(tab.filePath);
+        if (!remote) {
+          showToast(`Could not commit ${tab.fileName}: invalid remote path`);
+          return false;
+        }
+        try {
+          const result = await invoke<{ sha: string; committed: boolean }>("github_write_file", {
+            owner: remote.owner,
+            repo: remote.repo,
+            branch: remote.branch,
+            path: remote.relPath,
+            content: tab.content,
+            message: `Update ${remote.relPath || tab.fileName}`,
+            sha: tab.diskFingerprint ?? null,
+          });
+          const fileName = tab.filePath.replace(/\\/g, "/").split("/").pop() ?? tab.fileName;
+          markTabSaved(tab.id, tab.content, {
+            filePath: tab.filePath,
+            fileName,
+            diskModifiedAt: Date.now(),
+            diskFingerprint: result.sha,
+          });
+          addRecentFile(tab.filePath, fileName);
+          showToast(`Committed ${fileName} to ${remote.branch}`);
+          return true;
+        } catch (error) {
+          showToast(`Could not commit ${tab.fileName}: ${String(error)}`);
+          return false;
+        }
+      }
 
       let savePath = tab.filePath;
       if (saveAs || !savePath) {
@@ -546,47 +617,7 @@ function App() {
           diskFingerprint: result.fingerprint,
         });
         addRecentFile(savePath, fileName);
-
-        const { activeRemote, autoCommitOnSave, autoPushOnCommit } =
-          useRemoteWorkspaceStore.getState();
-        if (
-          activeRemote &&
-          autoCommitOnSave &&
-          isPathUnderRemoteRoot(savePath, activeRemote.rootPath)
-        ) {
-          const relative = relativePathUnderRoot(savePath, activeRemote.rootPath);
-          try {
-            const commitResult = await invoke<{
-              committed: boolean;
-              skippedEmpty: boolean;
-              message: string;
-            }>("git_commit_paths", {
-              repoPath: activeRemote.rootPath,
-              paths: [savePath],
-              message: `Update ${relative}`,
-            });
-            if (commitResult.committed) {
-              if (autoPushOnCommit) {
-                try {
-                  await invoke("git_push", { repoPath: activeRemote.rootPath });
-                  showToast(`Saved and pushed ${relative}`);
-                } catch (pushError) {
-                  showToast(
-                    `Saved and committed ${relative}, but push failed: ${String(pushError)}`,
-                  );
-                }
-              } else {
-                showToast(`Saved and committed ${relative}`);
-              }
-            } else {
-              showToast(`Saved ${fileName}`);
-            }
-          } catch (commitError) {
-            showToast(`Saved ${fileName}, but commit failed: ${String(commitError)}`);
-          }
-        } else {
-          showToast(`Saved ${fileName}`);
-        }
+        showToast(`Saved ${fileName}`);
 
         return true;
       } catch (error) {
@@ -1331,14 +1362,10 @@ function App() {
           isOpen
           onClose={() => setOpenRemoteOpen(false)}
           onError={showToast}
-          onOpened={(remote, reusedExisting) => {
+          onOpened={(remote) => {
             setSidebarOpen(true);
             setExternalRootPath(remote.rootPath);
-            showToast(
-              reusedExisting
-                ? `Opened ${remote.owner}/${remote.repo}`
-                : `Cloned ${remote.owner}/${remote.repo}`,
-            );
+            showToast(`Opened ${remote.owner}/${remote.repo} on ${remote.branch}`);
           }}
         />
       )}

@@ -45,13 +45,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     resetShortcut,
     resetShortcuts,
   } = useSettingsStore();
-  const {
-    autoCommitOnSave,
-    autoPushOnCommit,
-    setAutoCommitOnSave,
-    setAutoPushOnCommit,
-    activeRemote,
-  } = useRemoteWorkspaceStore();
+  const { activeRemote } = useRemoteWorkspaceStore();
   const [recording, setRecording] = useState<ShortcutId | null>(null);
   const [shortcutError, setShortcutError] = useState("");
   const [tokenInput, setTokenInput] = useState("");
@@ -251,8 +245,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div>
                 <h3 id="github-heading">GitHub</h3>
                 <p>
-                  Connect a Personal Access Token for private repos and push. Tokens are stored in
-                  the OS keychain, not in settings files.
+                  Connect a Personal Access Token for private repos and commits. Saving a file in an
+                  open remote repo commits it directly to that repo&apos;s branch. Tokens are stored
+                  in the OS keychain, not in settings files.
                 </p>
               </div>
             </div>
@@ -308,36 +303,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   {tokenMessage}
                 </p>
               )}
-            </div>
-            <div className="settings-row">
-              <div>
-                <h3>Commit on save</h3>
-                <p>
-                  When a remote workspace is open, create a git commit after each successful save.
-                </p>
-              </div>
-              <label className="settings-toggle">
-                <input
-                  type="checkbox"
-                  checked={autoCommitOnSave}
-                  onChange={(event) => setAutoCommitOnSave(event.target.checked)}
-                />
-                <span>{autoCommitOnSave ? "On" : "Off"}</span>
-              </label>
-            </div>
-            <div className="settings-row">
-              <div>
-                <h3>Push after commit</h3>
-                <p>After auto-commit, push to GitHub. Requires a token with push access.</p>
-              </div>
-              <label className="settings-toggle">
-                <input
-                  type="checkbox"
-                  checked={autoPushOnCommit}
-                  onChange={(event) => setAutoPushOnCommit(event.target.checked)}
-                />
-                <span>{autoPushOnCommit ? "On" : "Off"}</span>
-              </label>
             </div>
             {activeRemote && (
               <p className="open-remote-hint">

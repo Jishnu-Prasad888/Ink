@@ -2,19 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useRemoteWorkspaceStore, type ActiveRemote } from "../store/remoteWorkspaceStore";
 
-interface CloneResult {
+interface RepoInfo {
   rootPath: string;
   owner: string;
   repo: string;
   url: string;
   branch: string;
-  reusedExisting: boolean;
 }
 
 interface OpenRemoteModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onOpened: (remote: ActiveRemote, reusedExisting: boolean) => void;
+  onOpened: (remote: ActiveRemote) => void;
   onError: (message: string) => void;
 }
 
@@ -37,7 +36,7 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
 
   if (!isOpen) return null;
 
-  const handleClone = async () => {
+  const handleOpen = async () => {
     const value = input.trim();
     if (!value) {
       setLocalError("Enter a GitHub repository as owner/repo or a URL.");
@@ -46,7 +45,7 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
     setBusy(true);
     setLocalError("");
     try {
-      const result = await invoke<CloneResult>("clone_github_repo", { input: value });
+      const result = await invoke<RepoInfo>("github_open_repo", { input: value });
       const remote: ActiveRemote = {
         rootPath: result.rootPath,
         owner: result.owner,
@@ -55,7 +54,7 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
         branch: result.branch,
       };
       setActiveRemote(remote);
-      onOpened(remote, result.reusedExisting);
+      onOpened(remote);
       onClose();
       setInput("");
     } catch (error) {
@@ -88,8 +87,9 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
       >
         <h2 id="open-remote-title">Open Remote</h2>
         <p>
-          Clone a GitHub repository into Ink&apos;s local workspace. Public repos work without a
-          token; private repos need a Personal Access Token in Settings.
+          Open a GitHub repository without cloning it locally. Files are read and committed directly
+          through the GitHub API. Public repos work without a token; private repos need a Personal
+          Access Token in Settings.
         </p>
         <label className="open-remote-label" htmlFor="open-remote-input">
           Repository
@@ -104,13 +104,13 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
           aria-invalid={Boolean(localError)}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter" && !busy) void handleClone();
+            if (event.key === "Enter" && !busy) void handleOpen();
           }}
         />
         <p className="open-remote-hint">
           {hasToken
-            ? "GitHub token is saved for private repos and push."
-            : "No token saved — public clones only until you add one in Settings."}
+            ? "GitHub token is saved for private repos and commits."
+            : "No token saved — public repos only until you add one in Settings."}
         </p>
         {localError && (
           <p className="open-remote-error" role="alert">
@@ -124,7 +124,7 @@ export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemo
           <button
             type="button"
             className="primary"
-            onClick={() => void handleClone()}
+            onClick={() => void handleOpen()}
             disabled={busy}
           >
             {busy ? "Opening…" : "Open"}
