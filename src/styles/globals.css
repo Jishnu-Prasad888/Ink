@@ -593,20 +593,62 @@ textarea,
 
 .split-view {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 50% 50%;
   height: 100%;
   overflow: hidden;
+  transition: grid-template-columns 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.split-view[data-mode="edit"] {
+  grid-template-columns: 100% 0%;
+}
+
+.split-view[data-mode="view"] {
+  grid-template-columns: 0% 100%;
+}
+
+.split-view[data-mode="split"] {
+  grid-template-columns: 50% 50%;
+}
+
+.editor-pane,
+.preview-pane {
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  transition:
+    opacity 0.24s ease,
+    border-color 0.24s ease;
 }
 
 .editor-pane {
-  height: 100%;
-  overflow: hidden;
   border-right: 1px solid var(--border);
 }
+
 .preview-pane {
-  height: 100%;
-  overflow: hidden;
   background: var(--surface);
+}
+
+.split-view[data-mode="edit"] .editor-pane {
+  border-right-color: transparent;
+}
+
+.split-view[data-mode="edit"] .preview-pane,
+.split-view[data-mode="view"] .editor-pane {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.split-view[data-mode="view"] .editor-pane {
+  border-right-color: transparent;
+}
+
+.split-view[data-mode="split"] .editor-pane,
+.split-view[data-mode="split"] .preview-pane,
+.split-view[data-mode="edit"] .editor-pane,
+.split-view[data-mode="view"] .preview-pane {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ── Markdown Preview ────────────────────────────────────── */
@@ -2563,14 +2605,36 @@ textarea,
     flex: 1;
   }
 
+  .split-view,
+  .split-view[data-mode="split"] {
+    grid-template-columns: 100%;
+    grid-template-rows: 50% 50%;
+  }
+
+  .split-view[data-mode="edit"] {
+    grid-template-columns: 100%;
+    grid-template-rows: 100% 0%;
+  }
+
+  .split-view[data-mode="view"] {
+    grid-template-columns: 100%;
+    grid-template-rows: 0% 100%;
+  }
+
   .split-view {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
+    transition:
+      grid-template-columns 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+      grid-template-rows 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .editor-pane {
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .split-view[data-mode="edit"] .editor-pane,
+  .split-view[data-mode="view"] .editor-pane {
+    border-bottom-color: transparent;
   }
 
   .markdown-preview--readable,

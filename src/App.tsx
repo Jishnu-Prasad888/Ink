@@ -151,21 +151,23 @@ function TabContent({
 
   if (tab.type === "pdf") return <PdfViewer key={tab.id} tab={tab} />;
 
-  switch (viewMode ?? tab.mode) {
-    case "view":
-      return (
-        <MarkdownPreview
-          key={tab.id}
-          tab={tab}
-          widthMode={previewWidth}
-          showWidthToggle={viewMode === undefined}
-        />
-      );
-    case "split":
-      return viewMode === undefined ? <SplitView key={tab.id} tab={tab} /> : <Editor tab={tab} />;
-    default:
-      return <Editor key={tab.id} tab={tab} />;
+  // File-split panels only support edit/preview; document modes animate via SplitView.
+  if (viewMode === "view") {
+    return (
+      <MarkdownPreview
+        key={tab.id}
+        tab={tab}
+        widthMode={previewWidth}
+        showWidthToggle={false}
+      />
+    );
   }
+  if (viewMode === "edit") {
+    return <Editor key={tab.id} tab={tab} />;
+  }
+
+  return <SplitView key={tab.id} tab={tab} />;
+
 }
 
 // A panel in the split-file view with a tab-switcher header
@@ -963,14 +965,7 @@ function App() {
       );
     }
     if (activeTab.type === "pdf") return <PdfViewer key={activeTab.id} tab={activeTab} />;
-    switch (activeTab.mode) {
-      case "view":
-        return <MarkdownPreview key={activeTab.id} tab={activeTab} />;
-      case "split":
-        return <SplitView key={activeTab.id} tab={activeTab} />;
-      default:
-        return <Editor key={activeTab.id} tab={activeTab} />;
-    }
+    return <SplitView key={activeTab.id} tab={activeTab} />;
   };
 
   const renderContent = () => {
