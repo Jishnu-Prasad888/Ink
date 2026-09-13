@@ -1,7 +1,7 @@
 //! GitHub remote workspace helpers — credential storage and GitHub REST API.
 
 use base64::Engine;
-use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,8 +15,11 @@ const GITHUB_DEVICE_URL: &str = "https://github.com/login/device/code";
 const GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
 const GITHUB_OAUTH_SCOPE: &str = "repo";
 
-const PERCENT_SEGMENT: &AsciiSet =
-    &NON_ALPHANUMERIC.remove(b'.').remove(b'-').remove(b'_').remove(b'~');
+const PERCENT_SEGMENT: &AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'.')
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'~');
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct GithubAuth {
@@ -112,9 +115,8 @@ pub fn has_token(dir: &Path) -> Result<bool, String> {
 }
 
 pub fn validate_token(dir: &Path) -> Result<String, String> {
-    let token = get_token(dir)?.ok_or_else(|| {
-        "No GitHub token saved. Sign in with GitHub in Settings.".to_string()
-    })?;
+    let token = get_token(dir)?
+        .ok_or_else(|| "No GitHub token saved. Sign in with GitHub in Settings.".to_string())?;
     if token.len() < 8 {
         return Err("Token looks too short. Sign in again with GitHub.".into());
     }
@@ -168,7 +170,9 @@ pub async fn start_device_auth(dir: &Path) -> Result<DeviceAuthResponse, String>
             })
             .unwrap_or_else(|| text.clone());
         if status_code == 404 {
-            return Err(format!("GitHub does not recognize this OAuth App client id. {msg}"));
+            return Err(format!(
+                "GitHub does not recognize this OAuth App client id. {msg}"
+            ));
         }
         return Err(format!("GitHub sign-in error {status_code}: {msg}"));
     }
@@ -403,7 +407,7 @@ pub async fn list_dir(
     if !encoded.is_empty() {
         url = format!("{url}/{encoded}");
     }
-    url = format!("{url}?ref={}", &branch);
+    url = format!("{url}?ref={branch}");
     let json = gh_request(&client, reqwest::Method::GET, &url, token.as_deref(), None).await?;
     let entries = json
         .as_array()
@@ -455,15 +459,9 @@ pub async fn read_file(
         .unwrap_or_default()
         .to_string();
     let size = json.get("size").and_then(|v| v.as_u64()).unwrap_or(0);
-    let encoding = json
-        .get("encoding")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let encoding = json.get("encoding").and_then(|v| v.as_str()).unwrap_or("");
     let content = if encoding == "base64" {
-        let b64 = json
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let b64 = json.get("content").and_then(|v| v.as_str()).unwrap_or("");
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(b64.replace('\n', ""))
             .map_err(|e| format!("Failed to decode content: {e}"))?;
@@ -474,13 +472,10 @@ pub async fn read_file(
             .unwrap_or_default()
             .to_string()
     };
-    Ok(RemoteFile {
-        content,
-        sha,
-        size,
-    })
+    Ok(RemoteFile { content, sha, size })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn write_file(
     dir: &Path,
     owner: String,
@@ -504,7 +499,14 @@ pub async fn write_file(
     if let Some(sha) = sha {
         body["sha"] = Value::String(sha);
     }
-    let json = gh_request(&client, reqwest::Method::PUT, &url, token.as_deref(), Some(body)).await?;
+    let json = gh_request(
+        &client,
+        reqwest::Method::PUT,
+        &url,
+        token.as_deref(),
+        Some(body),
+    )
+    .await?;
     let new_sha = json
         .pointer("/content/sha")
         .or_else(|| json.pointer("/commit/sha"))
@@ -612,8 +614,8 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ink-auth-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
 
-        assert_eq!(has_token(&dir).unwrap(), false);
-        assert_eq!(has_oauth_client_id(&dir).unwrap(), false);
+        assert!(!has_token(&dir).unwrap());
+        assert!(!has_oauth_client_id(&dir).unwrap());
 
         set_oauth_client_id(&dir, "Iv1.abc123".into()).unwrap();
         set_token(&dir, "ghp_some_token".into()).unwrap();
@@ -625,8 +627,8 @@ mod tests {
         assert_eq!(get_token(&dir).unwrap().as_deref(), Some("ghp_some_token"));
 
         clear_token(&dir).unwrap();
-        assert_eq!(has_token(&dir).unwrap(), false);
-        assert_eq!(has_oauth_client_id(&dir).unwrap(), true);
+        assert!(!has_token(&dir).unwrap());
+        assert!(has_oauth_client_id(&dir).unwrap());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -565,7 +565,10 @@ async fn github_poll_device_auth(
 }
 
 #[tauri::command]
-async fn github_open_repo(app: AppHandle, input: String) -> Result<github_remote::RepoInfo, String> {
+async fn github_open_repo(
+    app: AppHandle,
+    input: String,
+) -> Result<github_remote::RepoInfo, String> {
     let dir = github_config_dir(&app)?;
     github_remote::open_repo(&dir, input).await
 }
@@ -595,6 +598,7 @@ async fn github_read_file(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn github_write_file(
     app: AppHandle,
     owner: String,
