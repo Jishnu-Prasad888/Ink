@@ -5,6 +5,11 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useTabStore } from "../store/tabStore";
 import { useRecentFilesStore } from "../store/recentFilesStore";
 import {
+  isRemotePath,
+  parseRemotePath,
+  useRemoteWorkspaceStore,
+} from "../store/remoteWorkspaceStore";
+import {
   ChevronIcon,
   CloseFolderIcon,
   FileIcon,
@@ -27,25 +32,59 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onError: (message: string) => void;
+  onRequestOpenRemote?: () => void;
+  /** When set, Explorer opens this folder as the workspace root. */
+  externalRootPath?: string | null;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  isOpen,
+  onClose,
+  onError,
+  onRequestOpenRemote,
+  externalRootPath,
+}) => {
   const [rootFolder, setRootFolder] = useState<string | null>(() =>
     localStorage.getItem("sidebar-root-folder"),
   );
   const [tree, setTree] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const requestGeneration = useRef(0);
+  const lastExternalRoot = useRef<string | null>(null);
   const addTab = useTabStore((state) => state.addTab);
   const addRecentFile = useRecentFilesStore((state) => state.addRecentFile);
+  const clearActiveRemoteIfRoot = useRemoteWorkspaceStore((state) => state.clearActiveRemoteIfRoot);
+  const setActiveRemote = useRemoteWorkspaceStore((state) => state.setActiveRemote);
   const activeFilePath = useTabStore(
     (state) => state.tabs.find((tab) => tab.id === state.activeTabId)?.filePath,
   );
 
+  const isRemoteRoot = rootFolder ? isRemotePath(rootFolder) : false;
+
+  const openWorkspaceRoot = useCallback((folderPath: string) => {
+    requestGeneration.current += 1;
+    setTree([]);
+    setExpanded(new Set());
+    setRootFolder(folderPath);
+    localStorage.setItem("sidebar-root-folder", folderPath);
+  }, []);
+
   const buildTree = useCallback(
     async (folderPath: string): Promise<FileNode[]> => {
+      const virtual = isRemotePath(folderPath) ? parseRemotePath(folderPath) : null;
       const build = async (currentPath: string): Promise<FileNode[]> => {
-        const entries: FileNode[] = await invoke("read_dir", { path: currentPath });
+        let entries: FileNode[];
+        if (virtual) {
+          const listPath = currentPath === folderPath ? "" : currentPath;
+          entries = await invoke<FileNode[]>("github_list_dir", {
+            owner: virtual.owner,
+            repo: virtual.repo,
+            path: listPath,
+            branch: virtual.branch,
+          });
+        } else {
+          entries = await invoke<FileNode[]>("read_dir", { path: currentPath });
+        }
         const nodes: FileNode[] = [];
         for (const entry of entries) {
           const node: FileNode = {
@@ -100,15 +139,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
     };
   }, [buildTree, onError, rootFolder]);
 
+  useEffect(() => {
+    if (!externalRootPath) return;
+    if (lastExternalRoot.current === externalRootPath) return;
+    lastExternalRoot.current = externalRootPath;
+    openWorkspaceRoot(externalRootPath);
+  }, [externalRootPath, openWorkspaceRoot]);
+
   const handleOpenFolder = async () => {
     try {
       const selected: string[] = await invoke("open_folder_dialog");
       if (selected.length > 0) {
-        requestGeneration.current += 1;
-        setTree([]);
-        setExpanded(new Set());
-        setRootFolder(selected[0]);
-        localStorage.setItem("sidebar-root-folder", selected[0]);
+        setActiveRemote(null);
+        openWorkspaceRoot(selected[0]);
       }
     } catch (error) {
       onError(`Could not open folder: ${String(error)}`);
@@ -116,6 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
   };
 
   const handleCloseFolder = () => {
+    clearActiveRemoteIfRoot(rootFolder);
     requestGeneration.current += 1;
     setRootFolder(null);
     setTree([]);
@@ -138,6 +182,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
     if (existingTab) {
       useTabStore.getState().setActiveTab(existingTab.id);
       addRecentFile(node.path, node.name);
+      return;
+    }
+    if (isRemoteRoot && rootFolder) {
+      const virtual = parseRemotePath(rootFolder);
+      if (!virtual) {
+        onError("Could not resolve the remote repository.");
+        return;
+      }
+      const filePath = `${rootFolder}/${node.path}`;
+      const existingRemoteTab = useTabStore.getState().tabs.find((t) => t.filePath === filePath);
+      if (existingRemoteTab) {
+        useTabStore.getState().setActiveTab(existingRemoteTab.id);
+        addRecentFile(filePath, node.name);
+        return;
+      }
+      try {
+        const result = await invoke<{ content: string; sha: string; size: number }>(
+          "github_read_file",
+          {
+            owner: virtual.owner,
+            repo: virtual.repo,
+            branch: virtual.branch,
+            path: node.path,
+          },
+        );
+        addTab({
+          type: "markdown",
+          filePath,
+          fileName: node.name,
+          content: result.content,
+          mode: "edit",
+          isDirty: false,
+          diskModifiedAt: 0,
+          diskFingerprint: result.sha,
+        });
+        addRecentFile(filePath, node.name);
+      } catch (error) {
+        onError(`Could not open ${node.name}: ${String(error)}`);
+      }
       return;
     }
     if (node.name.toLowerCase().endsWith(".pdf")) {
@@ -209,7 +292,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
   const renderTree = (nodes: FileNode[], level = 0) => {
     return nodes.map((node) => {
       const isExpanded = node.is_dir && expanded.has(node.path);
-      const isSelected = !node.is_dir && activeFilePath === node.path;
+      const fullPath = isRemoteRoot && rootFolder ? `${rootFolder}/${node.path}` : node.path;
+      const isSelected = !node.is_dir && activeFilePath === fullPath;
       return (
         <ContextMenu.Root key={node.path}>
           <ContextMenu.Trigger asChild>
@@ -220,7 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
               aria-expanded={node.is_dir ? isExpanded : undefined}
               aria-selected={isSelected}
               aria-level={level + 1}
-              title={node.path}
+              title={fullPath}
               style={{ paddingLeft: `${level * 16 + 12}px` }}
               onClick={() => (node.is_dir ? toggleExpand(node.path) : handleFileClick(node))}
               onKeyDown={(event) => {
@@ -269,39 +353,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
               )}
             </div>
           )}
-          <ContextMenu.Portal>
-            <ContextMenu.Content className="context-menu-content">
-              {node.is_dir && (
-                <>
-                  <ContextMenu.Item
-                    className="context-menu-item"
-                    onSelect={() => {
-                      const newName = prompt("Enter file name (without extension)");
-                      if (newName) void handleCreateFile(node.path, newName);
-                    }}
-                  >
-                    <PlusIcon /> New File
-                  </ContextMenu.Item>
-                  <ContextMenu.Item
-                    className="context-menu-item"
-                    onSelect={() => {
-                      const newName = prompt("Enter folder name");
-                      if (newName) void handleCreateFolder(node.path, newName);
-                    }}
-                  >
-                    <FolderPlusIcon /> New Folder
-                  </ContextMenu.Item>
-                  <ContextMenu.Separator className="context-menu-separator" />
-                </>
-              )}
-              <ContextMenu.Item
-                className="context-menu-item destructive"
-                onSelect={() => handleDelete(node.path)}
-              >
-                <TrashIcon /> Delete
-              </ContextMenu.Item>
-            </ContextMenu.Content>
-          </ContextMenu.Portal>
+          {!isRemoteRoot && (
+            <ContextMenu.Portal>
+              <ContextMenu.Content className="context-menu-content">
+                {node.is_dir && (
+                  <>
+                    <ContextMenu.Item
+                      className="context-menu-item"
+                      onSelect={() => {
+                        const newName = prompt("Enter file name (without extension)");
+                        if (newName) void handleCreateFile(node.path, newName);
+                      }}
+                    >
+                      <PlusIcon /> New File
+                    </ContextMenu.Item>
+                    <ContextMenu.Item
+                      className="context-menu-item"
+                      onSelect={() => {
+                        const newName = prompt("Enter folder name");
+                        if (newName) void handleCreateFolder(node.path, newName);
+                      }}
+                    >
+                      <FolderPlusIcon /> New Folder
+                    </ContextMenu.Item>
+                    <ContextMenu.Separator className="context-menu-separator" />
+                  </>
+                )}
+                <ContextMenu.Item
+                  className="context-menu-item destructive"
+                  onSelect={() => handleDelete(node.path)}
+                >
+                  <TrashIcon /> Delete
+                </ContextMenu.Item>
+              </ContextMenu.Content>
+            </ContextMenu.Portal>
+          )}
         </ContextMenu.Root>
       );
     });
@@ -316,7 +402,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
           <h3>Explorer</h3>
           {rootFolder && (
             <span className="sidebar-root" title={rootFolder}>
-              {rootFolder.replace(/\\/g, "/").split("/").pop()}
+              {isRemoteRoot
+                ? rootFolder.split("/")[2]
+                  ? `${rootFolder.split("/")[2]}/${rootFolder.split("/")[3]}`
+                  : rootFolder
+                : rootFolder.replace(/\\/g, "/").split("/").pop()}
             </span>
           )}
         </div>
@@ -328,30 +418,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onError }) =>
         <button onClick={handleOpenFolder} className="sidebar-btn">
           Open Folder
         </button>
+        {onRequestOpenRemote && (
+          <button onClick={onRequestOpenRemote} className="sidebar-btn">
+            Open Remote
+          </button>
+        )}
         {rootFolder && (
           <>
-            <button
-              className="sidebar-icon-btn"
-              title="New Markdown file"
-              aria-label="New Markdown file"
-              onClick={() => {
-                const name = prompt("Enter file name (without extension)");
-                if (name) void handleCreateFile(rootFolder, name);
-              }}
-            >
-              <PlusIcon />
-            </button>
-            <button
-              className="sidebar-icon-btn"
-              title="New folder"
-              aria-label="New folder"
-              onClick={() => {
-                const name = prompt("Enter folder name");
-                if (name) void handleCreateFolder(rootFolder, name);
-              }}
-            >
-              <FolderPlusIcon />
-            </button>
+            {!isRemoteRoot && (
+              <>
+                <button
+                  className="sidebar-icon-btn"
+                  title="New Markdown file"
+                  aria-label="New Markdown file"
+                  onClick={() => {
+                    const name = prompt("Enter file name (without extension)");
+                    if (name) void handleCreateFile(rootFolder, name);
+                  }}
+                >
+                  <PlusIcon />
+                </button>
+                <button
+                  className="sidebar-icon-btn"
+                  title="New folder"
+                  aria-label="New folder"
+                  onClick={() => {
+                    const name = prompt("Enter folder name");
+                    if (name) void handleCreateFolder(rootFolder, name);
+                  }}
+                >
+                  <FolderPlusIcon />
+                </button>
+              </>
+            )}
             <button
               className="sidebar-icon-btn"
               title="Refresh Explorer"

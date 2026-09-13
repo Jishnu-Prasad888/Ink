@@ -1,0 +1,156 @@
+import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useRemoteWorkspaceStore, type ActiveRemote } from "../store/remoteWorkspaceStore";
+import { DeviceAuthModal } from "./DeviceAuthModal";
+
+interface RepoInfo {
+  rootPath: string;
+  owner: string;
+  repo: string;
+  url: string;
+  branch: string;
+}
+
+interface OpenRemoteModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onOpened: (remote: ActiveRemote) => void;
+  onError: (message: string) => void;
+}
+
+export function OpenRemoteModal({ isOpen, onClose, onOpened, onError }: OpenRemoteModalProps) {
+  const setActiveRemote = useRemoteWorkspaceStore((s) => s.setActiveRemote);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [localError, setLocalError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    void invoke<boolean>("github_has_token")
+      .then(setHasToken)
+      .catch(() => setHasToken(false));
+    inputRef.current?.focus();
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleOpen = async () => {
+    const value = input.trim();
+    if (!value) {
+      setLocalError("Enter a GitHub repository as owner/repo or a URL.");
+      return;
+    }
+    setBusy(true);
+    setLocalError("");
+    try {
+      const result = await invoke<RepoInfo>("github_open_repo", { input: value });
+      const remote: ActiveRemote = {
+        rootPath: result.rootPath,
+        owner: result.owner,
+        repo: result.repo,
+        url: result.url,
+        branch: result.branch,
+      };
+      setActiveRemote(remote);
+      onOpened(remote);
+      onClose();
+      setInput("");
+    } catch (error) {
+      const message = String(error);
+      setLocalError(message);
+      onError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !busy) onClose();
+      }}
+    >
+      <section
+        ref={dialogRef}
+        className="save-dialog open-remote-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="open-remote-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <h2 id="open-remote-title">Open Remote</h2>
+        <p>
+          Open a GitHub repository without cloning it locally. Files are read and committed directly
+          through the GitHub API. Public repos work without a token; private repos need a Personal
+          Access Token in Settings.
+        </p>
+        <label className="open-remote-label" htmlFor="open-remote-input">
+          Repository
+        </label>
+        <input
+          id="open-remote-input"
+          ref={inputRef}
+          className="open-remote-input"
+          value={input}
+          disabled={busy}
+          placeholder="owner/repo or https://github.com/owner/repo"
+          aria-invalid={Boolean(localError)}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !busy) void handleOpen();
+          }}
+        />
+        <p className="open-remote-hint">
+          {hasToken
+            ? "Signed in with GitHub — you can open and commit to repositories."
+            : "Sign in to open private repositories and commit files right from Ink."}
+        </p>
+        {!hasToken && (
+          <button
+            type="button"
+            className="settings-primary-btn open-remote-signin"
+            onClick={() => setAuthOpen(true)}
+          >
+            Sign in with GitHub
+          </button>
+        )}
+        {localError && (
+          <p className="open-remote-error" role="alert">
+            {localError}
+          </p>
+        )}
+        <div className="save-dialog-actions">
+          <button type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="primary"
+            onClick={() => void handleOpen()}
+            disabled={busy}
+          >
+            {busy ? "Opening…" : "Open"}
+          </button>
+        </div>
+      </section>
+      <DeviceAuthModal
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onSuccess={() => {
+          void invoke<boolean>("github_has_token")
+            .then(setHasToken)
+            .catch(() => setHasToken(false));
+        }}
+      />
+    </div>
+  );
+}

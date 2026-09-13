@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useSettingsStore, type AppFont, type ColorTheme } from "../store/settingsStore";
+import { useRemoteWorkspaceStore } from "../store/remoteWorkspaceStore";
+import { DeviceAuthModal } from "./DeviceAuthModal";
 import {
   defaultShortcuts,
   formatShortcut,
@@ -42,8 +46,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     resetShortcut,
     resetShortcuts,
   } = useSettingsStore();
+  const { activeRemote } = useRemoteWorkspaceStore();
   const [recording, setRecording] = useState<ShortcutId | null>(null);
   const [shortcutError, setShortcutError] = useState("");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [hasToken, setHasToken] = useState(false);
+  const [clientIdInput, setClientIdInput] = useState("");
+  const [hasClientId, setHasClientId] = useState(false);
+  const [clientIdBusy, setClientIdBusy] = useState(false);
+  const [clientIdMessage, setClientIdMessage] = useState("");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
 
@@ -51,7 +62,51 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (isOpen) closeButtonRef.current?.focus();
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    void invoke<boolean>("github_has_token")
+      .then(setHasToken)
+      .catch(() => setHasToken(false));
+    void invoke<boolean>("github_has_oauth_client_id")
+      .then(setHasClientId)
+      .catch(() => setHasClientId(false));
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const refreshTokenStatus = async () => {
+    const [present, clientIdPresent] = await Promise.all([
+      invoke<boolean>("github_has_token"),
+      invoke<boolean>("github_has_oauth_client_id"),
+    ]);
+    setHasToken(present);
+    setHasClientId(clientIdPresent);
+  };
+
+  const saveClientId = async () => {
+    setClientIdBusy(true);
+    setClientIdMessage("");
+    try {
+      await invoke("github_set_oauth_client_id", { clientId: clientIdInput });
+      setClientIdInput("");
+      await refreshTokenStatus();
+      setClientIdMessage("OAuth App client id saved.");
+    } catch (error) {
+      setClientIdMessage(String(error));
+    } finally {
+      setClientIdBusy(false);
+    }
+  };
+
+  const clearGithubAccess = async () => {
+    try {
+      await invoke("github_clear_token");
+      await refreshTokenStatus();
+      setClientIdMessage("Signed out of GitHub.");
+    } catch (error) {
+      setClientIdMessage(String(error));
+    }
+  };
 
   const recordShortcut = (event: React.KeyboardEvent, id: ShortcutId) => {
     event.preventDefault();
@@ -91,7 +146,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         if (event.key !== "Tab" || !dialogRef.current) return;
         const focusable = Array.from(
           dialogRef.current.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
+            'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex]:not([tabindex="-1"])',
           ),
         );
         const first = focusable[0];
@@ -189,6 +244,102 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </select>
             </div>
           </section>
+
+          <section className="settings-section" aria-labelledby="github-heading">
+            <div className="settings-section-heading">
+              <div>
+                <h3 id="github-heading">GitHub</h3>
+                <p>
+                  Sign in once with GitHub to open repositories and commit files. Saving a file in
+                  an open remote repo commits it directly to that repo&apos;s branch. Access is
+                  stored privately on this device, not in settings files.
+                </p>
+              </div>
+            </div>
+            <div className="settings-row">
+              <div>
+                <h3>GitHub access</h3>
+                <p>
+                  {hasToken
+                    ? "Signed in. Ink can open repositories and commit on your behalf."
+                    : "Not signed in yet."}
+                </p>
+              </div>
+              <span className={`settings-status-pill${hasToken ? " connected" : ""}`}>
+                {hasToken ? "Connected" : "Not connected"}
+              </span>
+            </div>
+            <div className="github-token-actions">
+              <button
+                type="button"
+                className="settings-primary-btn"
+                onClick={() => setAuthOpen(true)}
+              >
+                Sign in with GitHub
+              </button>
+              {hasToken && (
+                <button type="button" onClick={() => void clearGithubAccess()}>
+                  Sign out
+                </button>
+              )}
+            </div>
+            {clientIdMessage && (
+              <p className="settings-error" role="status">
+                {clientIdMessage}
+              </p>
+            )}
+            <div className="github-token-form">
+              <label htmlFor="github-oauth-client-id">
+                GitHub OAuth App client id{" "}
+                {hasClientId && <span className="settings-status-pill connected">configured</span>}
+              </label>
+              <input
+                id="github-oauth-client-id"
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={clientIdInput}
+                disabled={clientIdBusy}
+                placeholder="Iv1.xxxxxxxxxxxx"
+                onChange={(event) => setClientIdInput(event.target.value)}
+              />
+              <div className="github-token-actions">
+                <button
+                  type="button"
+                  className="settings-primary-btn"
+                  disabled={clientIdBusy || !clientIdInput.trim()}
+                  onClick={() => void saveClientId()}
+                >
+                  Save client id
+                </button>
+                <button
+                  type="button"
+                  className="settings-link-btn"
+                  onClick={() =>
+                    void openUrl("https://github.com/settings/developers").catch(() => undefined)
+                  }
+                >
+                  Create an OAuth App on GitHub
+                </button>
+              </div>
+              <p className="open-remote-hint">
+                Register a GitHub OAuth App (name Ink, no callback URL needed), then copy its client
+                id here once so &quot;Sign in with GitHub&quot; can ask for repository access in
+                your browser.
+              </p>
+            </div>
+            {activeRemote && (
+              <p className="open-remote-hint">
+                Active remote: {activeRemote.owner}/{activeRemote.repo} ({activeRemote.branch})
+              </p>
+            )}
+          </section>
+
+          <DeviceAuthModal
+            isOpen={authOpen}
+            onClose={() => setAuthOpen(false)}
+            onSuccess={() => void refreshTokenStatus()}
+          />
 
           <details className="settings-section shortcuts-section">
             <summary>

@@ -6,6 +6,8 @@ use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tauri::{AppHandle, Emitter, Manager};
 
+mod github_remote;
+
 /// Opens a file-picker dialog for documents supported by the workspace.
 #[tauri::command]
 async fn open_file_dialog(app: AppHandle) -> Result<Vec<String>, String> {
@@ -298,6 +300,18 @@ pub fn run() {
             delete_item,
             read_file_binary,
             open_folder_dialog,
+            github_set_token,
+            github_has_token,
+            github_clear_token,
+            github_validate_token,
+            github_set_oauth_client_id,
+            github_has_oauth_client_id,
+            github_start_device_auth,
+            github_poll_device_auth,
+            github_open_repo,
+            github_list_dir,
+            github_read_file,
+            github_write_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -315,6 +329,11 @@ async fn read_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
         let file_type = entry.file_type().map_err(|e| e.to_string())?;
         let name = entry.file_name().to_string_lossy().to_string();
         let path = entry.path().to_string_lossy().to_string();
+
+        // Hide VCS metadata from the Explorer.
+        if name == ".git" {
+            continue;
+        }
 
         // Only show directories and markdown/PDF files
         let lower_name = name.to_lowercase();
@@ -486,4 +505,106 @@ async fn open_folder_dialog(app: AppHandle) -> Result<Vec<String>, String> {
             Ok(vec![])
         }
     }
+}
+
+fn github_config_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_config_dir().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn github_set_token(app: AppHandle, token: String) -> Result<(), String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::set_token(&dir, token)
+}
+
+#[tauri::command]
+fn github_has_token(app: AppHandle) -> Result<bool, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::has_token(&dir)
+}
+
+#[tauri::command]
+fn github_clear_token(app: AppHandle) -> Result<(), String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::clear_token(&dir)
+}
+
+#[tauri::command]
+fn github_validate_token(app: AppHandle) -> Result<String, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::validate_token(&dir)
+}
+
+#[tauri::command]
+fn github_set_oauth_client_id(app: AppHandle, client_id: String) -> Result<(), String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::set_oauth_client_id(&dir, client_id)
+}
+
+#[tauri::command]
+fn github_has_oauth_client_id(app: AppHandle) -> Result<bool, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::has_oauth_client_id(&dir)
+}
+
+#[tauri::command]
+async fn github_start_device_auth(
+    app: AppHandle,
+) -> Result<github_remote::DeviceAuthResponse, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::start_device_auth(&dir).await
+}
+
+#[tauri::command]
+async fn github_poll_device_auth(
+    app: AppHandle,
+    device_code: String,
+) -> Result<github_remote::DeviceAuthStatus, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::poll_device_auth(&dir, device_code).await
+}
+
+#[tauri::command]
+async fn github_open_repo(app: AppHandle, input: String) -> Result<github_remote::RepoInfo, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::open_repo(&dir, input).await
+}
+
+#[tauri::command]
+async fn github_list_dir(
+    app: AppHandle,
+    owner: String,
+    repo: String,
+    path: String,
+    branch: String,
+) -> Result<Vec<github_remote::TreeEntry>, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::list_dir(&dir, owner, repo, path, branch).await
+}
+
+#[tauri::command]
+async fn github_read_file(
+    app: AppHandle,
+    owner: String,
+    repo: String,
+    branch: String,
+    path: String,
+) -> Result<github_remote::RemoteFile, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::read_file(&dir, owner, repo, branch, path).await
+}
+
+#[tauri::command]
+async fn github_write_file(
+    app: AppHandle,
+    owner: String,
+    repo: String,
+    branch: String,
+    path: String,
+    content: String,
+    message: String,
+    sha: Option<String>,
+) -> Result<github_remote::WriteResult, String> {
+    let dir = github_config_dir(&app)?;
+    github_remote::write_file(&dir, owner, repo, branch, path, content, message, sha).await
 }

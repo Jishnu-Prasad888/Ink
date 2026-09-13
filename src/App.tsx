@@ -9,9 +9,15 @@ import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import { Tab } from "./components/Tab";
 import { SettingsModal } from "./components/SettingsModal";
 import { ExportPdfModal } from "./components/ExportPdfModal";
+import { OpenRemoteModal } from "./components/OpenRemoteModal";
 import { useTabStore } from "./store/tabStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useRecentFilesStore } from "./store/recentFilesStore";
+import {
+  isRemotePath,
+  parseRemotePath,
+  useRemoteWorkspaceStore,
+} from "./store/remoteWorkspaceStore";
 import { formatShortcut, matchesShortcut } from "./utils/shortcuts";
 import { exportMarkdownToPdf } from "./utils/pdfExport";
 import { listen } from "@tauri-apps/api/event";
@@ -114,12 +120,15 @@ const Icon = {
     </svg>
   ),
   Settings: () => (
-    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.3" />
-      <path
-        d="M7 1.5v1.2M7 11.3v1.2M1.5 7h1.2M11.3 7h1.2M3.1 3.1l.9.9M10 10l.9.9M10.9 3.1l-.9.9M4 10l-.9.9"
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+      <circle
+        cx="8"
+        cy="8"
+        r="4.8"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.2"
+        strokeDasharray="1.1 2.67"
         strokeLinecap="round"
       />
     </svg>
@@ -327,10 +336,14 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [openingFile, setOpeningFile] = useState<string | null>(null);
   const [pendingClose, setPendingClose] = useState<PendingClose | null>(null);
   const { theme, appFont, shortcuts, pdfOrientation, setPdfOrientation } = useSettingsStore();
   const { recentFiles, addRecentFile, removeRecentFile, clearRecentFiles } = useRecentFilesStore();
+  const activeRemote = useRemoteWorkspaceStore((state) => state.activeRemote);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openRemoteOpen, setOpenRemoteOpen] = useState(false);
+  const [externalRootPath, setExternalRootPath] = useState<string | null>(null);
   const [exportTabId, setExportTabId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -395,12 +408,49 @@ function App() {
     window.setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const openPath = useCallback(
+  const openPathCore = useCallback(
     async (filePath: string) => {
       const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
       const existing = useTabStore.getState().tabs.find((tab) => tab.filePath === filePath);
       if (existing) {
         useTabStore.getState().setActiveTab(existing.id);
+        addRecentFile(filePath, fileName);
+        return;
+      }
+
+      if (isRemotePath(filePath)) {
+        const remote = parseRemotePath(filePath);
+        if (!remote) {
+          showToast(`Could not open ${fileName}: invalid remote path`);
+          return;
+        }
+        const result = await invoke<{ content: string; sha: string; size: number }>(
+          "github_read_file",
+          {
+            owner: remote.owner,
+            repo: remote.repo,
+            branch: remote.branch,
+            path: remote.relPath,
+          },
+        );
+        const openedWhileReading = useTabStore
+          .getState()
+          .tabs.find((tab) => tab.filePath === filePath);
+        if (openedWhileReading) {
+          useTabStore.getState().setActiveTab(openedWhileReading.id);
+          addRecentFile(filePath, fileName);
+          return;
+        }
+        addTab({
+          filePath,
+          fileName,
+          content: result.content,
+          mode: "edit",
+          isDirty: false,
+          type: "markdown",
+          diskModifiedAt: Date.now(),
+          diskFingerprint: result.sha,
+        });
         addRecentFile(filePath, fileName);
         return;
       }
@@ -442,7 +492,20 @@ function App() {
       });
       addRecentFile(filePath, fileName);
     },
-    [addRecentFile, addTab],
+    [addRecentFile, addTab, showToast],
+  );
+
+  const openPath = useCallback(
+    async (filePath: string) => {
+      const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? filePath;
+      setOpeningFile(fileName);
+      try {
+        await openPathCore(filePath);
+      } finally {
+        setOpeningFile(null);
+      }
+    },
+    [openPathCore],
   );
 
   const handleOpenFile = useCallback(async () => {
@@ -457,7 +520,9 @@ function App() {
   const handleOpenRecentFile = useCallback(
     async (filePath: string) => {
       try {
-        await invoke("get_file_info", { path: filePath });
+        if (!isRemotePath(filePath)) {
+          await invoke("get_file_info", { path: filePath });
+        }
         await openPath(filePath);
       } catch (error) {
         removeRecentFile(filePath);
@@ -471,6 +536,38 @@ function App() {
     async (tabId: string, saveAs = false) => {
       const tab = useTabStore.getState().tabs.find((item) => item.id === tabId);
       if (!tab || tab.type !== "markdown" || tab.content === null) return false;
+
+      if (!saveAs && tab.filePath && isRemotePath(tab.filePath)) {
+        const remote = parseRemotePath(tab.filePath);
+        if (!remote) {
+          showToast(`Could not commit ${tab.fileName}: invalid remote path`);
+          return false;
+        }
+        try {
+          const result = await invoke<{ sha: string; committed: boolean }>("github_write_file", {
+            owner: remote.owner,
+            repo: remote.repo,
+            branch: remote.branch,
+            path: remote.relPath,
+            content: tab.content,
+            message: `Update ${remote.relPath || tab.fileName}`,
+            sha: tab.diskFingerprint ?? null,
+          });
+          const fileName = tab.filePath.replace(/\\/g, "/").split("/").pop() ?? tab.fileName;
+          markTabSaved(tab.id, tab.content, {
+            filePath: tab.filePath,
+            fileName,
+            diskModifiedAt: Date.now(),
+            diskFingerprint: result.sha,
+          });
+          addRecentFile(tab.filePath, fileName);
+          showToast(`Committed ${fileName} to ${remote.branch}`);
+          return true;
+        } catch (error) {
+          showToast(`Could not commit ${tab.fileName}: ${String(error)}`);
+          return false;
+        }
+      }
 
       let savePath = tab.filePath;
       if (saveAs || !savePath) {
@@ -538,6 +635,7 @@ function App() {
         });
         addRecentFile(savePath, fileName);
         showToast(`Saved ${fileName}`);
+
         return true;
       } catch (error) {
         showToast(`Could not save ${tab.fileName}: ${String(error)}`);
@@ -995,6 +1093,13 @@ function App() {
       run: () => void handleOpenFile(),
     },
     {
+      label: "File: Open Remote…",
+      run: () => {
+        setSidebarOpen(true);
+        setOpenRemoteOpen(true);
+      },
+    },
+    {
       label: "File: Save",
       shortcut: formatShortcut(shortcuts["file.save"]),
       run: () => void handleSaveFile(),
@@ -1191,7 +1296,13 @@ function App() {
 
       {/* ── Main layout ── */}
       <main className="main-layout">
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onError={showToast} />
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onError={showToast}
+          onRequestOpenRemote={() => setOpenRemoteOpen(true)}
+          externalRootPath={externalRootPath}
+        />
         <div className="content-wrapper">
           {!splitLayout.enabled && <TabBar onRequestClose={(id) => requestClose([id])} />}
           <div
@@ -1211,6 +1322,11 @@ function App() {
             ? `${activeTab.fileName}${activeTab.isDirty ? " - Unsaved" : " - Saved"}`
             : "No document open"}
         </span>
+        {activeRemote && (
+          <span className="status-remote" title={activeRemote.url}>
+            {activeRemote.owner}/{activeRemote.repo}
+          </span>
+        )}
         {activeTab?.type === "markdown" && (
           <span className="status-metrics">
             Ln {line}, Col {column} | {wordCount} words | Markdown
@@ -1258,6 +1374,18 @@ function App() {
 
       {settingsOpen && <SettingsModal isOpen onClose={() => setSettingsOpen(false)} />}
 
+      {openRemoteOpen && (
+        <OpenRemoteModal
+          isOpen
+          onClose={() => setOpenRemoteOpen(false)}
+          onError={showToast}
+          onOpened={(remote) => {
+            setSidebarOpen(true);
+            setExternalRootPath(remote.rootPath);
+            showToast(`Opened ${remote.owner}/${remote.repo} on ${remote.branch}`);
+          }}
+        />
+      )}
       {exportTab && (
         <ExportPdfModal
           fileName={exportTab.fileName}
@@ -1335,6 +1463,13 @@ function App() {
       {toast && (
         <div className="app-toast" role="status">
           {toast}
+        </div>
+      )}
+
+      {openingFile && (
+        <div className="app-loading" role="status" aria-live="polite">
+          <span className="app-loading-spinner" aria-hidden="true" />
+          <span>Opening {openingFile}…</span>
         </div>
       )}
 
