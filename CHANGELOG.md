@@ -2,6 +2,31 @@
 
 All notable changes to Ink are documented in this file.
 
+## 1.4.0 - 2026-11-25
+
+### GitHub remote workspaces
+
+- Open a GitHub repository as a workspace without cloning; files are read and committed through the GitHub REST API on save.
+- Sign in with GitHub's OAuth device flow; credentials are stored in a config file instead of the system keyring.
+
+### Reading and appearance
+
+- Restyled the Dark theme (and System in dark mode) with a Techno Dracula palette.
+- Markdown files now open in Preview by default.
+- Widened the readable preview column from 720px to 960px.
+- Added a gear icon for Settings and a loading indicator while files open.
+
+### Editing
+
+- Editor and preview now scroll in sync in Split mode.
+
+### Performance
+
+- Mermaid now loads only when a document contains a diagram, shrinking the main bundle from 3.78 MB to 2.30 MB.
+- Code highlighting bundles highlight.js's common language set.
+- Preview re-renders are debounced while typing, and session state is written to storage in batches.
+- Fixed task-list checkbox listeners accumulating on every preview render.
+
 ## 1.3.1 - 2026-09-12
 
 ### Interface

@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "1.3.1"
+      - "1.4.0"
 
 permissions:
   contents: write
@@ -44,37 +44,38 @@ jobs:
           tagName: __VERSION__
           releaseName: Ink __VERSION__
           releaseBody: |
-            # Ink 1.3.1
+            # Ink 1.4.0
 
-            Ink 1.3.1 refreshes the interface toward a clearer Apple-inspired design and makes everyday mode switching feel smoother on Linux and Windows.
+            Ink 1.4.0 adds GitHub remote workspaces, synced scrolling in Split mode, a Techno Dracula dark theme, and faster startup.
 
-            ## Interface
+            ## GitHub remote workspaces
 
-            - Refines the overall look toward a light, system-like visual language with clearer hierarchy and selection contrast.
-            - Keeps application chrome text (toolbars, dialog headings, sidebar labels) non-selectable so UI chrome does not interfere with editing.
-            - Leaves document content selectable in the editor, Markdown preview, form fields, and PDF text layers.
-            - Starts with the Explorer sidebar closed by default for a calmer first viewport.
-            - Extracts toolbar controls into a dedicated component for cleaner layout ownership.
+            - Open a GitHub repository as a workspace without cloning; files are read and committed through the GitHub REST API on save.
+            - Sign in with GitHub's OAuth device flow; credentials are stored in a config file instead of the system keyring.
 
-            ## Editing experience
+            ## Reading and appearance
 
-            - Animates transitions between Edit, Split, and Preview modes so panes slide and fade instead of hard-swapping.
-            - Keeps both editor and preview mounted during mode changes to preserve scroll and editing continuity.
+            - Restyled the Dark theme (and System in dark mode) with a Techno Dracula palette.
+            - Markdown files now open in Preview by default.
+            - Widened the readable preview column from 720px to 960px.
+            - Added a gear icon for Settings and a loading indicator while files open.
 
-            ## Reliability
+            ## Editing
 
-            - Resolves npm install peer-dependency issues affecting CI and local setups.
-            - Fixes Prettier formatting and Editor scroll-restore lint failures so the release pipeline stays green.
+            - Editor and preview now scroll in sync in Split mode.
+
+            ## Performance
+
+            - Mermaid now loads only when a document contains a diagram, shrinking the main bundle from 3.78 MB to 2.30 MB.
+            - Code highlighting bundles highlight.js's common language set.
+            - Preview re-renders are debounced while typing, and session state is written to storage in batches.
+            - Fixed task-list checkbox listeners accumulating on every preview render.
 
             ## Upgrade notes
 
             - Existing documents, drafts, themes, shortcuts, and session data remain compatible.
-            - Explorer now opens closed on launch; use the Explorer toggle or shortcut to show it.
-
-            ## Verification
-
-            - Frontend formatting, linting, automated tests, TypeScript compilation, and production bundling pass.
-            - Rust formatting, tests, and clippy pass.
+            - Markdown files now open in Preview; switch to Edit or Split from the toolbar or with the view shortcuts.
+            - Code blocks in less common languages outside highlight.js's common set render without syntax colors.
 
             Download the Linux or Windows installer/package below.
           releaseDraft: false
