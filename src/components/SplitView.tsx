@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Editor } from "./Editor";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { Tab } from "../store/tabStore";
+import { useScrollSync } from "./useScrollSync";
 
 interface SplitViewProps {
   tab: Tab;
@@ -13,9 +14,11 @@ export const SplitView: React.FC<SplitViewProps> = ({ tab, searchQuery = "" }) =
   const isSplit = mode === "split";
   const editorHidden = mode === "view";
   const previewHidden = mode === "edit";
+  const containerRef = useRef<HTMLDivElement>(null);
+  useScrollSync(containerRef, isSplit);
 
   return (
-    <div className="split-view" data-mode={mode}>
+    <div ref={containerRef} className="split-view" data-mode={mode}>
       <div className="editor-pane" aria-hidden={editorHidden} inert={editorHidden || undefined}>
         <Editor tab={tab} searchQuery={searchQuery} />
       </div>

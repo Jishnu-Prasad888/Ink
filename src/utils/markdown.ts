@@ -68,15 +68,29 @@ md.use(markdownItTexmath, {
   katexOptions: { macros: {} },
 });
 
+// Tag block elements with their 0-based source line so the editor and the
+// preview can keep their scroll positions in sync.
+export const SOURCE_LINE_ATTR = "data-source-line";
+md.core.ruler.push("source_line", (state) => {
+  for (const token of state.tokens) {
+    if (token.map && token.level === 0 && token.nesting !== -1) {
+      token.attrSet(SOURCE_LINE_ATTR, String(token.map[0]));
+    }
+  }
+});
+
 const defaultFence = md.renderer.rules.fence!;
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const code = token.content.trim();
+  const line = token.attrGet(SOURCE_LINE_ATTR);
+  const lineAttr = line === null ? "" : ` ${SOURCE_LINE_ATTR}="${line}"`;
 
   if (token.info === "mermaid") {
-    return `<pre class="mermaid">${md.utils.escapeHtml(code)}</pre>`;
+    return `<pre class="mermaid"${lineAttr}>${md.utils.escapeHtml(code)}</pre>`;
   }
-  return defaultFence(tokens, idx, options, env, self);
+  // The highlighter returns its own <pre>, which markdown-it emits without attrs.
+  return defaultFence(tokens, idx, options, env, self).replace(/^<pre\b/, `<pre${lineAttr}`);
 };
 
 export const renderMarkdown = async (content: string): Promise<string> => {
@@ -85,6 +99,7 @@ export const renderMarkdown = async (content: string): Promise<string> => {
   html = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ALLOW_DATA_ATTR: false,
+    ADD_ATTR: [SOURCE_LINE_ATTR],
     FORBID_TAGS: ["form", "iframe", "object", "style", "template"],
   });
 

@@ -30,4 +30,24 @@ describe("renderMarkdown", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(html).toContain("&lt;/pre&gt;");
   });
+
+  it("tags top-level blocks with their source line for scroll sync", async () => {
+    const html = await renderMarkdown(
+      "# Title\n\nPara\n\n- a\n- b\n\n```js\nlet x = 1;\n```\n\n```mermaid\ngraph TD\n```\n",
+    );
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    const lines = Array.from(container.querySelectorAll("[data-source-line]")).map((el) => [
+      el.tagName,
+      el.getAttribute("data-source-line"),
+    ]);
+
+    expect(lines).toEqual([
+      ["H1", "0"],
+      ["P", "2"],
+      ["UL", "4"],
+      ["PRE", "7"],
+      ["PRE", "11"],
+    ]);
+  });
 });
