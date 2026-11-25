@@ -1,6 +1,41 @@
 // store/tabStore.ts – extended with type, pdf, and split-panel support
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+
+// Session state includes every open tab's content, so writing it on each
+// keystroke is expensive. Coalesce writes and flush them when the page hides.
+const PERSIST_DEBOUNCE_MS = 500;
+const pendingWrites = new Map<string, string>();
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+export const flushTabStorage = () => {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = null;
+  if (typeof localStorage === "undefined") return;
+  pendingWrites.forEach((value, name) => localStorage.setItem(name, value));
+  pendingWrites.clear();
+};
+
+const debouncedStorage: StateStorage = {
+  getItem: (name) => pendingWrites.get(name) ?? localStorage.getItem(name),
+  setItem: (name, value) => {
+    pendingWrites.set(name, value);
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(flushTabStorage, PERSIST_DEBOUNCE_MS);
+  },
+  removeItem: (name) => {
+    pendingWrites.delete(name);
+    localStorage.removeItem(name);
+  },
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushTabStorage);
+  window.addEventListener("beforeunload", flushTabStorage);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushTabStorage();
+  });
+}
 
 export interface Tab {
   id: string;
@@ -435,6 +470,7 @@ export const useTabStore = create<TabStore>()(
     }),
     {
       name: "markdown-editor-session",
+      storage: createJSONStorage(() => debouncedStorage),
       partialize: (state) => ({
         tabs: state.tabs.map((tab) => ({
           ...tab,

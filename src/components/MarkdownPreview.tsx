@@ -3,6 +3,8 @@ import { renderMarkdown, renderMermaidDiagrams } from "../utils/markdown";
 import { Tab, useTabStore } from "../store/tabStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
+const RENDER_DEBOUNCE_MS = 120;
+
 interface MarkdownPreviewProps {
   tab: Tab;
   isSplit?: boolean;
@@ -32,18 +34,36 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   const didRestoreScroll = useRef(false);
   const initialScrollPos = useRef(tab.previewScrollPosition ?? 0);
 
+  const hasRendered = useRef(false);
+
+  // Render immediately on first paint, then debounce while the user is typing
+  // so large documents don't re-parse on every keystroke.
   useEffect(() => {
+    let cancelled = false;
     const render = async () => {
       const rendered = await renderMarkdown(tab.content || "");
-      setHtml(rendered);
+      if (!cancelled) {
+        hasRendered.current = true;
+        setHtml(rendered);
+      }
     };
-    render();
+    if (!hasRendered.current) {
+      render();
+      return () => {
+        cancelled = true;
+      };
+    }
+    const timer = window.setTimeout(render, RENDER_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [tab.content]);
 
   useEffect(() => {
     if (!previewRef.current) return;
 
-    if (!didRestoreScroll.current) {
+    if (!didRestoreScroll.current && html) {
       didRestoreScroll.current = true;
       if (initialScrollPos.current > 0) {
         previewRef.current.scrollTop = initialScrollPos.current;
@@ -53,27 +73,32 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     renderMermaidDiagrams(previewRef.current).catch((error) => {
       console.error("Failed to render Mermaid diagram", error);
     });
+  }, [html]);
 
-    const taskItems = previewRef.current.querySelectorAll(".task-list-item input");
-    taskItems.forEach((checkbox, taskIndex) => {
-      checkbox.addEventListener("change", () => {
-        const lines = (tab.content || "").split("\n");
-        const taskLines = lines
-          .map((line, index) => ({ line, index }))
-          .filter(({ line }) => /^\s*[-+*]\s+\[[ xX]\]/.test(line));
-        const lineIndex = taskLines[taskIndex]?.index ?? -1;
-        if (lineIndex !== -1) {
-          const currentLine = lines[lineIndex];
-          const newLine = currentLine.replace(
-            /\[[ xX]\]/,
-            `[${(checkbox as HTMLInputElement).checked ? "x" : " "}]`,
-          );
-          lines[lineIndex] = newLine;
-          saveTabContent(tab.id, lines.join("\n"));
-        }
-      });
-    });
-  }, [html, saveTabContent, tab.content, tab.id]);
+  // One delegated listener for task checkboxes instead of one per checkbox per render.
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    const handleChange = (event: Event) => {
+      const checkbox = event.target as HTMLInputElement;
+      if (!checkbox.matches(".task-list-item input")) return;
+      const taskIndex = Array.from(preview.querySelectorAll(".task-list-item input")).indexOf(
+        checkbox,
+      );
+      const lines = (useTabStore.getState().tabs.find((t) => t.id === tab.id)?.content || "").split(
+        "\n",
+      );
+      const taskLines = lines
+        .map((line, index) => ({ line, index }))
+        .filter(({ line }) => /^\s*[-+*]\s+\[[ xX]\]/.test(line));
+      const lineIndex = taskLines[taskIndex]?.index ?? -1;
+      if (lineIndex === -1) return;
+      lines[lineIndex] = lines[lineIndex].replace(/\[[ xX]\]/, `[${checkbox.checked ? "x" : " "}]`);
+      saveTabContent(tab.id, lines.join("\n"));
+    };
+    preview.addEventListener("change", handleChange);
+    return () => preview.removeEventListener("change", handleChange);
+  }, [saveTabContent, tab.id]);
 
   useEffect(() => {
     const preview = previewRef.current;
@@ -141,7 +166,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
     preview.addEventListener("click", handleClick);
     return () => preview.removeEventListener("click", handleClick);
-  }, [html]);
+  }, []);
 
   return (
     <div className="preview-container">

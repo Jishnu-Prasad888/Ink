@@ -10,7 +10,7 @@ import { Tab } from "./components/Tab";
 import { SettingsModal } from "./components/SettingsModal";
 import { ExportPdfModal } from "./components/ExportPdfModal";
 import { OpenRemoteModal } from "./components/OpenRemoteModal";
-import { useTabStore } from "./store/tabStore";
+import { flushTabStorage, useTabStore } from "./store/tabStore";
 import { useSettingsStore } from "./store/settingsStore";
 import { useRecentFilesStore } from "./store/recentFilesStore";
 import {
@@ -689,6 +689,7 @@ function App() {
 
       tabIds.forEach((id) => useTabStore.getState().closeTab(id));
       if (closeWindow) {
+        flushTabStorage();
         void quitApp().catch((error) => {
           showToast(`Could not close Ink: ${String(error)}`);
         });
@@ -716,6 +717,7 @@ function App() {
       setPendingClose(null);
       if (request.closeWindow) {
         try {
+          flushTabStorage();
           await quitApp();
         } catch (error) {
           showToast(`Could not close Ink: ${String(error)}`);

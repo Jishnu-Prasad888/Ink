@@ -1,10 +1,10 @@
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
-import hljs from "highlight.js";
+import hljs from "highlight.js/lib/common";
 import markdownItTaskLists from "markdown-it-task-lists";
 import markdownItFootnote from "markdown-it-footnote";
 import markdownItTexmath from "markdown-it-texmath";
-import mermaid from "mermaid";
+import type { Mermaid } from "mermaid";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github.css";
@@ -13,20 +13,29 @@ if (import.meta.env.DEV) {
   console.log("[markdown] Initializing with highlight.js, mermaid, katex");
 }
 
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: "strict",
-  theme: "base",
-  themeVariables: {
-    background: "#FFFFFF",
-    primaryColor: "#0969DA",
-    primaryBorderColor: "#0969DA",
-    primaryTextColor: "#1F2328",
-    lineColor: "#57606A",
-    secondaryColor: "#F6F8FA",
-    tertiaryColor: "#D0D7DE",
-  },
-});
+// Mermaid is large (~3 MB with its diagram chunks), so load it only when a
+// document actually contains a diagram.
+let mermaidPromise: Promise<Mermaid> | null = null;
+const loadMermaid = () => {
+  mermaidPromise ??= import("mermaid").then(({ default: mermaid }) => {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+      themeVariables: {
+        background: "#FFFFFF",
+        primaryColor: "#0969DA",
+        primaryBorderColor: "#0969DA",
+        primaryTextColor: "#1F2328",
+        lineColor: "#57606A",
+        secondaryColor: "#F6F8FA",
+        tertiaryColor: "#D0D7DE",
+      },
+    });
+    return mermaid;
+  });
+  return mermaidPromise;
+};
 
 const md: MarkdownIt = new MarkdownIt({
   // Documents are untrusted input. Raw HTML is rendered as text rather than
@@ -87,6 +96,7 @@ export const renderMermaidDiagrams = async (root: ParentNode) => {
   const elements = root.querySelectorAll<HTMLElement>(".mermaid");
   if (import.meta.env.DEV) console.log(`[renderMermaid] Found ${elements.length} mermaid elements`);
   if (elements.length > 0) {
+    const mermaid = await loadMermaid();
     await mermaid.run({
       nodes: elements,
       suppressErrors: true,
