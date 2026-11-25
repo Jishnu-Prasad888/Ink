@@ -20,7 +20,7 @@ interface SettingsModalProps {
 const themes: { value: ColorTheme; label: string; description: string }[] = [
   { value: "system", label: "System", description: "Match your device" },
   { value: "light", label: "Light", description: "Clean white" },
-  { value: "dark", label: "Dark", description: "True black-gray" },
+  { value: "dark", label: "Dark", description: "Techno Dracula" },
   { value: "nord", label: "Nord", description: "Cool arctic" },
   { value: "charcoal", label: "Charcoal", description: "Warm graphite" },
 ];

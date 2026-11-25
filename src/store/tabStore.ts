@@ -107,7 +107,11 @@ export const useTabStore = create<TabStore>()(
           if (state.splitLayout.enabled) {
             const panels = [...state.splitLayout.panels] as [SplitPanel, SplitPanel];
             const panelIndex = state.splitLayout.activePanelIndex;
-            panels[panelIndex] = { ...panels[panelIndex], tabId: newTab.id };
+            panels[panelIndex] = {
+              ...panels[panelIndex],
+              tabId: newTab.id,
+              ...(newTab.mode === "view" ? { viewMode: "view" as const } : {}),
+            };
             newState.splitLayout = {
               ...state.splitLayout,
               panels,
