@@ -596,11 +596,19 @@ textarea,
 /* ── Split View ──────────────────────────────────────────── */
 
 .split-view {
+  --split: 50%;
+  position: relative;
   display: grid;
-  grid-template-columns: 50% 50%;
+  grid-template-columns: var(--split) calc(100% - var(--split));
   height: 100%;
   overflow: hidden;
   transition: grid-template-columns 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.split-view[data-dragging] {
+  transition: none;
+  cursor: col-resize;
+  user-select: none;
 }
 
 .split-view[data-mode="edit"] {
@@ -612,7 +620,38 @@ textarea,
 }
 
 .split-view[data-mode="split"] {
-  grid-template-columns: 50% 50%;
+  grid-template-columns: var(--split) calc(100% - var(--split));
+}
+
+.split-view-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--split);
+  z-index: 5;
+  width: 9px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.split-view-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background 0.12s;
+}
+
+.split-view-divider:hover::after,
+.split-view-divider:focus-visible::after,
+.split-view[data-dragging] .split-view-divider::after {
+  background: var(--accent);
 }
 
 .editor-pane,
@@ -2814,7 +2853,32 @@ textarea,
   .split-view,
   .split-view[data-mode="split"] {
     grid-template-columns: 100%;
-    grid-template-rows: 50% 50%;
+    grid-template-rows: var(--split) calc(100% - var(--split));
+  }
+
+  .split-view[data-dragging] {
+    cursor: row-resize;
+  }
+
+  .split-view-divider {
+    top: var(--split);
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 9px;
+    transform: translateY(-50%);
+    cursor: row-resize;
+  }
+
+  .split-view-divider::after {
+    top: 50%;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 2px;
+    transform: translateY(-50%);
   }
 
   .split-view[data-mode="edit"] {
