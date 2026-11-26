@@ -1,34 +1,28 @@
-# Ink 1.4.0
+# Ink 1.5.0
 
-Ink 1.4.0 adds GitHub remote workspaces, synced scrolling in Split mode, a Techno Dracula dark theme, and faster startup.
+Ink 1.5.0 adds in-app screenshots, resizable Split mode panes, and renders Pandoc tables and more Mermaid diagrams.
 
-## GitHub remote workspaces
+## Screenshots
 
-- Open a GitHub repository as a workspace without cloning; files are read and committed through the GitHub REST API on save.
-- Sign in with GitHub's OAuth device flow; credentials are stored in a config file instead of the system keyring.
-
-## Reading and appearance
-
-- Restyled the Dark theme (and System in dark mode) with a Techno Dracula palette.
-- Markdown files now open in Preview by default.
-- Widened the readable preview column from 720px to 960px.
-- Added a gear icon for Settings and a loading indicator while files open.
+- Press Alt+Shift+S (configurable in Settings) to drag-select an area of the window; click or press Enter to capture the whole window.
+- Right-click anywhere for Screenshot Area and Screenshot Window.
+- Copy the result to the clipboard or save it as a PNG.
 
 ## Editing
 
-- Editor and preview now scroll in sync in Split mode.
+- Drag the divider between the editor and preview in Split mode to resize them; double-click to reset. The width is remembered.
+- New right-click menu with Cut, Copy, Paste and Select All in the editor and preview.
+- Shortcuts that use Alt now work on macOS.
 
-## Performance
+## Preview
 
-- Mermaid now loads only when a document contains a diagram, shrinking the main bundle from 3.78 MB to 2.30 MB.
-- Code highlighting bundles highlight.js's common language set.
-- Preview re-renders are debounced while typing, and session state is written to storage in batches.
-- Fixed task-list checkbox listeners accumulating on every preview render.
+- Pandoc multiline and simple tables (common in documents converted from Word) now render as tables.
+- Mermaid diagrams fenced as `Mermaid`, `{.mermaid}` or without a language now render.
+- Mermaid diagrams follow the app theme, redraw when it changes, and no longer clip their labels.
 
 ## Upgrade notes
 
 - Existing documents, drafts, themes, shortcuts, and session data remain compatible.
-- Markdown files now open in Preview; switch to Edit or Split from the toolbar or with the view shortcuts.
-- Code blocks in less common languages outside highlight.js's common set render without syntax colors.
+- Right-clicking in the editor or preview now shows Ink's menu instead of the system one; text fields keep the system menu.
 
 Download the Linux or Windows installer/package below.

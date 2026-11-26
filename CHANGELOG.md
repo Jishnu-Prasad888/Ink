@@ -2,6 +2,26 @@
 
 All notable changes to Ink are documented in this file.
 
+## 1.5.0 - 2026-11-26
+
+### Screenshots
+
+- Alt+Shift+S (configurable) drag-selects an area of the window to capture; click or Enter captures the whole window.
+- Right-click menu entries for Screenshot Area and Screenshot Window.
+- Copy the result to the clipboard or save it as a PNG.
+
+### Editing
+
+- Resizable editor and preview panes in Split mode; the width is remembered and double-click resets it.
+- App-wide right-click menu with Cut, Copy, Paste and Select All in the editor and preview.
+- Shortcuts with Alt match on the physical key, so they work on macOS.
+
+### Preview
+
+- Render Pandoc multiline and simple tables.
+- Recognise Mermaid fences written as `Mermaid`, `{.mermaid}`, or untagged diagrams.
+- Theme Mermaid diagrams from the app colours, redraw them on theme change, and stop clipping labels.
+
 ## 1.4.0 - 2026-11-25
 
 ### GitHub remote workspaces
