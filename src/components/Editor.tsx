@@ -7,6 +7,7 @@ import { tags } from "@lezer/highlight";
 import { Tab, useTabStore } from "../store/tabStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { editorKeymapExtensions } from "./editorExtensions";
+import { ZOOM_TAB_ATTR } from "../utils/wheelZoom";
 
 interface EditorProps {
   tab: Tab;
@@ -202,6 +203,7 @@ export const Editor: React.FC<EditorProps> = ({ tab, searchQuery = "" }) => {
   return (
     <div
       className="edit-mode"
+      {...{ [ZOOM_TAB_ATTR]: tab.id }}
       style={
         {
           "--document-zoom": tab.documentZoom ?? 1,

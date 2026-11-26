@@ -7,6 +7,7 @@ import {
   previewTopToLine,
   type ScrollAnchor,
 } from "../utils/scrollSync";
+import { DOCUMENT_ZOOM_EVENT, type DocumentZoomDetail } from "../utils/wheelZoom";
 
 /** A programmatic scroll lands within this many px of its target. */
 const ECHO_TOLERANCE_PX = 2;
@@ -135,6 +136,12 @@ export const useScrollSync = (containerRef: RefObject<HTMLElement | null>, enabl
       anchors = null;
       schedule(leader);
     };
+    // Zooming rescales the preview's content without resizing the preview itself.
+    const onZoom = (event: Event) => {
+      const { anchoredPane } = (event as CustomEvent<DocumentZoomDetail>).detail;
+      if (anchoredPane) leader = anchoredPane;
+      invalidate();
+    };
     const mutationObserver = new MutationObserver(invalidate);
     const resizeObserver = new ResizeObserver(invalidate);
 
@@ -152,6 +159,7 @@ export const useScrollSync = (containerRef: RefObject<HTMLElement | null>, enabl
       mutationObserver.observe(preview!, { childList: true, subtree: true });
       resizeObserver.observe(preview!);
       resizeObserver.observe(view!.scrollDOM);
+      container.addEventListener(DOCUMENT_ZOOM_EVENT, onZoom);
       schedule("editor");
     };
     attach();
@@ -165,6 +173,7 @@ export const useScrollSync = (containerRef: RefObject<HTMLElement | null>, enabl
         view?.scrollDOM.removeEventListener("scroll", onEditorScroll);
         preview?.removeEventListener("scroll", onPreviewScroll);
         preview?.removeEventListener("load", invalidate, true);
+        container.removeEventListener(DOCUMENT_ZOOM_EVENT, onZoom);
       }
     };
   }, [containerRef, enabled]);

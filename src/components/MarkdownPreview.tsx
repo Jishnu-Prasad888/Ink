@@ -3,6 +3,7 @@ import { renderMarkdown, renderMermaidDiagrams } from "../utils/markdown";
 import { Tab, useTabStore } from "../store/tabStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { ZOOM_TAB_ATTR } from "../utils/wheelZoom";
 
 const RENDER_DEBOUNCE_MS = 120;
 
@@ -196,6 +197,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
       <div
         ref={previewRef}
+        {...{ [ZOOM_TAB_ATTR]: tab.id }}
         className={`markdown-preview${isFullWidth ? " markdown-preview--full" : " markdown-preview--readable"}${isSplit ? " markdown-preview--split" : ""}`}
         style={
           {

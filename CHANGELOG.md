@@ -15,12 +15,23 @@ All notable changes to Ink are documented in this file.
 - Resizable editor and preview panes in Split mode; the width is remembered and double-click resets it.
 - App-wide right-click menu with Cut, Copy, Paste and Select All in the editor and preview.
 - Shortcuts with Alt match on the physical key, so they work on macOS.
+- Alt+Shift+Up/Down duplicates lines; adding cursors moves to Ctrl+Alt+Up/Down (custom bindings are kept); Alt+Up/Down moves lines.
+
+### Zoom
+
+- Smooth Ctrl/Cmd+wheel zoom proportional to wheel travel, applied once per frame and saved when the wheel stops.
+- Keep the content under the pointer in place while zooming; scroll sync follows the anchored pane.
+- Scale PDFs visually during the gesture and re-render once it ends.
 
 ### Preview
 
 - Render Pandoc multiline and simple tables.
 - Recognise Mermaid fences written as `Mermaid`, `{.mermaid}`, or untagged diagrams.
 - Theme Mermaid diagrams from the app colours, redraw them on theme change, and stop clipping labels.
+
+### Security
+
+- Resolve high-severity npm audit advisories (Vite, markdown-it, DOMPurify and transitive dependencies).
 
 ## 1.4.0 - 2026-11-25
 

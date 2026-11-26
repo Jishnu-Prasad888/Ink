@@ -9,6 +9,7 @@ import { Tab, useTabStore } from "../store/tabStore";
 // and fall back to raw text layer only
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
+import { ZOOM_TAB_ATTR } from "../utils/wheelZoom";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -175,7 +176,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ tab }) => {
           Rotate ↷
         </button>
       </div>
-      <div ref={documentRef} className="pdf-document">
+      <div ref={documentRef} className="pdf-document" {...{ [ZOOM_TAB_ATTR]: tab.id }}>
         <Document
           file={blobUrl}
           onLoadSuccess={onDocumentLoadSuccess}

@@ -7,6 +7,16 @@ import { Sidebar } from "./components/Sidebar";
 import { PdfViewer } from "./components/PdfViewer";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
 import { ScreenshotTool } from "./components/ScreenshotTool";
+import {
+  ZOOM_TAB_ATTR,
+  anchorPdfScroll,
+  applyDocumentZoom,
+  clampZoom,
+  pdfZoomOrigin,
+  previewPdfZoom,
+  roundZoom,
+  wheelZoomFactor,
+} from "./utils/wheelZoom";
 import { requestScreenshot } from "./utils/screenshot";
 import { AppContextMenu } from "./components/AppContextMenu";
 import { Tab } from "./components/Tab";
@@ -50,6 +60,8 @@ const log = (msg: string, data?: unknown) => {
 
 const isSupportedDocumentPath = (path: string) =>
   [".md", ".markdown", ".txt", ".pdf"].some((extension) => path.toLowerCase().endsWith(extension));
+
+const WHEEL_ZOOM_IDLE_MS = 180;
 
 const changeDocumentZoom = (tabId: string, direction: -1 | 0 | 1) => {
   const { tabs, updateTab } = useTabStore.getState();
@@ -381,16 +393,104 @@ function App() {
       .forEach((file) => addRecentFile(file.path, file.fileName));
   }, [addRecentFile]);
 
+  // Ctrl/Cmd+wheel zoom: proportional to wheel travel, applied to the DOM once
+  // per frame, and saved to the tab once the wheel stops (see utils/wheelZoom).
   useEffect(() => {
     const contentArea = document.getElementById("editor-content");
-    if (!contentArea) return;
-    const handleWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey || !activeTabId || !contentArea.contains(event.target as Node)) return;
-      event.preventDefault();
-      changeDocumentZoom(activeTabId, event.deltaY < 0 ? 1 : -1);
+    if (!contentArea || !activeTabId) return;
+
+    interface Gesture {
+      tabId: string;
+      isPdf: boolean;
+      base: number; // zoom saved on the tab when the gesture started
+      applied: number; // zoom currently shown
+      target: number; // zoom the wheel has asked for
+      pointer: { x: number; y: number };
+      pdfOrigin: { x: number; y: number } | null;
+    }
+    let gesture: Gesture | null = null;
+    let frame = 0;
+    let idleTimer = 0;
+
+    const zoomTargets = (tabId: string) =>
+      Array.from(
+        contentArea.querySelectorAll<HTMLElement>(`[${ZOOM_TAB_ATTR}="${CSS.escape(tabId)}"]`),
+      );
+
+    const render = () => {
+      frame = 0;
+      if (!gesture || gesture.target === gesture.applied) return;
+      const targets = zoomTargets(gesture.tabId);
+      if (gesture.isPdf) {
+        const pdfTarget = targets[0];
+        if (pdfTarget) {
+          gesture.pdfOrigin ??= pdfZoomOrigin(pdfTarget, gesture.pointer);
+          previewPdfZoom(pdfTarget, gesture.target / gesture.base, gesture.pdfOrigin);
+        }
+      } else {
+        applyDocumentZoom(targets, gesture.applied, gesture.target, gesture.pointer);
+      }
+      gesture.applied = gesture.target;
     };
+
+    const commit = () => {
+      window.clearTimeout(idleTimer);
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      render();
+      const finished = gesture;
+      gesture = null;
+      if (!finished) return;
+      const zoom = roundZoom(finished.applied);
+      const { updateTab } = useTabStore.getState();
+      if (!finished.isPdf) {
+        updateTab(finished.tabId, { documentZoom: zoom });
+        return;
+      }
+      const pdfTarget = zoomTargets(finished.tabId)[0];
+      const before = pdfTarget
+        ? { left: pdfTarget.scrollLeft, top: pdfTarget.scrollTop }
+        : { left: 0, top: 0 };
+      updateTab(finished.tabId, { pdfZoom: zoom });
+      // Swap the scaled preview for the page re-rendered at the new size.
+      requestAnimationFrame(() => {
+        if (!pdfTarget) return;
+        previewPdfZoom(pdfTarget, 1, { x: 0, y: 0 });
+        anchorPdfScroll(pdfTarget, before, zoom / finished.base, finished.pointer);
+      });
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !contentArea.contains(event.target as Node)) return;
+      event.preventDefault();
+      const tab = useTabStore.getState().tabs.find((item) => item.id === activeTabId);
+      if (!tab) return;
+      const isPdf = tab.type === "pdf";
+      if (!gesture || gesture.tabId !== tab.id) {
+        if (gesture) commit();
+        const base = (isPdf ? tab.pdfZoom : tab.documentZoom) ?? 1;
+        gesture = {
+          tabId: tab.id,
+          isPdf,
+          base,
+          applied: base,
+          target: base,
+          pointer: { x: event.clientX, y: event.clientY },
+          pdfOrigin: null,
+        };
+      }
+      gesture.pointer = { x: event.clientX, y: event.clientY };
+      gesture.target = clampZoom(gesture.target * wheelZoomFactor(event), isPdf);
+      frame ||= requestAnimationFrame(render);
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(commit, WHEEL_ZOOM_IDLE_MS);
+    };
+
     contentArea.addEventListener("wheel", handleWheel, { passive: false });
-    return () => contentArea.removeEventListener("wheel", handleWheel);
+    return () => {
+      contentArea.removeEventListener("wheel", handleWheel);
+      commit();
+    };
   }, [activeTabId]);
 
   // ── File operations ──────────────────────────────────────────────────────
