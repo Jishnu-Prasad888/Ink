@@ -34,13 +34,13 @@ export const shortcutDefinitions = [
     id: "editor.addCursorAbove",
     label: "Add cursor above",
     group: "Editor",
-    defaultKey: "Alt+Shift+ArrowUp",
+    defaultKey: "Mod+Alt+ArrowUp",
   },
   {
     id: "editor.addCursorBelow",
     label: "Add cursor below",
     group: "Editor",
-    defaultKey: "Alt+Shift+ArrowDown",
+    defaultKey: "Mod+Alt+ArrowDown",
   },
   { id: "editor.moveLineUp", label: "Move line up", group: "Editor", defaultKey: "Alt+ArrowUp" },
   {
@@ -48,6 +48,18 @@ export const shortcutDefinitions = [
     label: "Move line down",
     group: "Editor",
     defaultKey: "Alt+ArrowDown",
+  },
+  {
+    id: "editor.copyLineUp",
+    label: "Duplicate line up",
+    group: "Editor",
+    defaultKey: "Alt+Shift+ArrowUp",
+  },
+  {
+    id: "editor.copyLineDown",
+    label: "Duplicate line down",
+    group: "Editor",
+    defaultKey: "Alt+Shift+ArrowDown",
   },
 ] as const;
 

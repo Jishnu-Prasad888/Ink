@@ -1,6 +1,8 @@
 import {
   addCursorAbove,
   addCursorBelow,
+  copyLineDown,
+  copyLineUp,
   defaultKeymap,
   moveLineDown,
   moveLineUp,
@@ -102,6 +104,14 @@ export const editorKeymapExtensions = (shortcuts: ShortcutMap) => {
     {
       key: shortcutToCodeMirror(shortcuts["editor.moveLineDown"]),
       run: lineCommand(moveLineDown),
+    },
+    {
+      key: shortcutToCodeMirror(shortcuts["editor.copyLineUp"]),
+      run: lineCommand(copyLineUp),
+    },
+    {
+      key: shortcutToCodeMirror(shortcuts["editor.copyLineDown"]),
+      run: lineCommand(copyLineDown),
     },
   ];
   const remainingDefaults = defaultKeymap.filter(

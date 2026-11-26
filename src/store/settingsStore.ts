@@ -44,19 +44,23 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "ink-settings",
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => {
         const saved = persisted as Partial<SettingsStore>;
-        if (version < 2 && saved.shortcuts?.["app.commandPalette"] === "Mod+Shift+P") {
-          return {
-            ...saved,
-            shortcuts: {
-              ...saved.shortcuts,
-              "app.commandPalette": defaultShortcuts["app.commandPalette"],
-            },
-          };
+        const shortcuts: Partial<ShortcutMap> = { ...saved.shortcuts };
+        if (version < 2 && shortcuts["app.commandPalette"] === "Mod+Shift+P") {
+          shortcuts["app.commandPalette"] = defaultShortcuts["app.commandPalette"];
         }
-        return saved;
+        // Alt+Shift+Arrow moved from adding cursors to duplicating lines.
+        if (version < 3) {
+          if (shortcuts["editor.addCursorAbove"] === "Alt+Shift+ArrowUp") {
+            shortcuts["editor.addCursorAbove"] = defaultShortcuts["editor.addCursorAbove"];
+          }
+          if (shortcuts["editor.addCursorBelow"] === "Alt+Shift+ArrowDown") {
+            shortcuts["editor.addCursorBelow"] = defaultShortcuts["editor.addCursorBelow"];
+          }
+        }
+        return saved.shortcuts ? { ...saved, shortcuts: shortcuts as ShortcutMap } : saved;
       },
       merge: (persisted, current) => {
         const saved = persisted as Partial<SettingsStore>;
