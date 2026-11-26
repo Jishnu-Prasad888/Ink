@@ -29,10 +29,10 @@
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "@uiw/react-codemirror": "^4.25.9",
-    "dompurify": "^3.4.12",
+    "dompurify": "^3.5.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.44",
-    "markdown-it": "^14.1.1",
+    "markdown-it": "^14.3.3",
     "markdown-it-footnote": "^4.0.0",
     "markdown-it-task-lists": "^2.1.1",
     "markdown-it-texmath": "^1.0.0",
@@ -59,7 +59,14 @@
     "prettier": "^3.9.6",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.65.0",
-    "vite": "^7.0.4",
+    "vite": "^7.3.8",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "undici": "^7.30.2",
+    "zod": "^4.6.6",
+    "source-map-js": "^1.2.4",
+    "brace-expansion@4": "^4.0.1",
+    "brace-expansion@5": "^5.1.0"
   }
 }
