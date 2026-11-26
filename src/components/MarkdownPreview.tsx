@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { renderMarkdown, renderMermaidDiagrams } from "../utils/markdown";
 import { Tab, useTabStore } from "../store/tabStore";
+import { useSettingsStore } from "../store/settingsStore";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 const RENDER_DEBOUNCE_MS = 120;
@@ -28,6 +29,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
   const isFullWidth = resolvedWidthMode === "full";
 
   const previewRef = useRef<HTMLDivElement>(null);
+  const theme = useSettingsStore((state) => state.theme);
   const updateTab = useTabStore((state) => state.updateTab);
   const saveTabContent = useTabStore((state) => state.saveTabContent);
 
@@ -70,10 +72,16 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
       }
     }
 
-    renderMermaidDiagrams(previewRef.current).catch((error) => {
-      console.error("Failed to render Mermaid diagram", error);
+    // Wait a frame so a theme change has reached the document's CSS variables,
+    // which App applies in an effect that runs after this one.
+    const preview = previewRef.current;
+    const frame = requestAnimationFrame(() => {
+      renderMermaidDiagrams(preview).catch((error) => {
+        console.error("Failed to render Mermaid diagram", error);
+      });
     });
-  }, [html]);
+    return () => cancelAnimationFrame(frame);
+  }, [html, theme]);
 
   // One delegated listener for task checkboxes instead of one per checkbox per render.
   useEffect(() => {

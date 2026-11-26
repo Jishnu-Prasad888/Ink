@@ -696,6 +696,11 @@ textarea,
 
 /* ── Markdown Preview ────────────────────────────────────── */
 
+.markdown-preview pre.mermaid {
+  font-family: var(--font-preview);
+  text-align: center;
+}
+
 .markdown-preview {
   font-family: var(--font-preview);
   color: var(--text-primary);
