@@ -7,6 +7,12 @@ export const shortcutDefinitions = [
     defaultKey: "Mod+`",
   },
   {
+    id: "app.screenshot",
+    label: "Screenshot area",
+    group: "Application",
+    defaultKey: "Alt+Shift+S",
+  },
+  {
     id: "view.toggleExplorer",
     label: "Toggle Explorer",
     group: "Application",
@@ -66,7 +72,12 @@ export const shortcutFromEvent = (event: KeyboardEvent | React.KeyboardEvent): s
   if (event.ctrlKey || event.metaKey) parts.push("Mod");
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
-  parts.push(normalizeEventKey(event.key));
+  // With Alt held, macOS reports composed characters (Alt+Shift+S is "Í"), so
+  // fall back to the physical key for letters and digits.
+  const physical = /^Key([A-Z])$|^Digit(\d)$/.exec(event.code ?? "");
+  parts.push(
+    event.altKey && physical ? (physical[1] ?? physical[2]) : normalizeEventKey(event.key),
+  );
   return parts.join("+");
 };
 

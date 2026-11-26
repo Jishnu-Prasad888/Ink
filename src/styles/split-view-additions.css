@@ -167,3 +167,124 @@
   background: var(--danger-bg) !important;
   border-color: var(--danger) !important;
 }
+
+/* ── App context menu ─────────────────────────────────────────────────── */
+
+.app-context-menu {
+  z-index: 1300;
+  display: flex;
+  min-width: 210px;
+  flex-direction: column;
+}
+
+.app-context-menu .context-menu-item {
+  justify-content: space-between;
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.app-context-menu .context-menu-item:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.app-context-menu .context-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  opacity: 0.55;
+}
+
+.app-context-menu .context-menu-item:disabled:hover {
+  background: transparent;
+}
+
+.app-context-menu-shortcut {
+  color: var(--text-muted);
+  font: 11px var(--font-ui);
+}
+
+/* ── Screenshots ──────────────────────────────────────────────────────── */
+
+.screenshot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgb(0 0 0 / 35%);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.screenshot-overlay--dragging {
+  background: transparent;
+}
+
+.screenshot-selection {
+  position: absolute;
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.screenshot-selection-size {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  padding: 2px 6px;
+  color: #fff;
+  background: rgb(0 0 0 / 70%);
+  border-radius: 4px;
+  font: 11px var(--font-ui);
+  white-space: nowrap;
+}
+
+.screenshot-hint {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  padding: 8px 14px;
+  color: #fff;
+  background: rgb(0 0 0 / 70%);
+  border-radius: 6px;
+  font: 12px var(--font-ui);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.screenshot-dialog {
+  width: min(720px, 100%);
+}
+
+.screenshot-preview {
+  display: grid;
+  max-height: 60vh;
+  margin-top: 8px;
+  overflow: auto;
+  place-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.screenshot-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+.screenshot-dialog .screenshot-meta {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.save-dialog-actions button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

@@ -6,6 +6,9 @@ import { SplitView } from "./components/SplitView";
 import { Sidebar } from "./components/Sidebar";
 import { PdfViewer } from "./components/PdfViewer";
 import { ResizableSplitPane } from "./components/ResizableSplitPane";
+import { ScreenshotTool } from "./components/ScreenshotTool";
+import { requestScreenshot } from "./utils/screenshot";
+import { AppContextMenu } from "./components/AppContextMenu";
 import { Tab } from "./components/Tab";
 import { SettingsModal } from "./components/SettingsModal";
 import { ExportPdfModal } from "./components/ExportPdfModal";
@@ -783,6 +786,11 @@ function App() {
         setCommandIndex(0);
         return;
       }
+      if (matchesShortcut(e, shortcuts["app.screenshot"])) {
+        e.preventDefault();
+        requestScreenshot("area");
+        return;
+      }
       if (matchesShortcut(e, shortcuts["view.toggleExplorer"])) {
         e.preventDefault();
         setSidebarOpen((open) => !open);
@@ -1084,6 +1092,15 @@ function App() {
   };
 
   const commands = [
+    {
+      label: "Screenshot: Capture Area",
+      shortcut: formatShortcut(shortcuts["app.screenshot"]),
+      run: () => requestScreenshot("area"),
+    },
+    {
+      label: "Screenshot: Capture Window",
+      run: () => requestScreenshot("window"),
+    },
     {
       label: "File: New Document",
       shortcut: formatShortcut(shortcuts["file.new"]),
@@ -1461,6 +1478,9 @@ function App() {
           </div>
         </div>
       )}
+
+      <ScreenshotTool onMessage={showToast} />
+      <AppContextMenu screenshotShortcut={formatShortcut(shortcuts["app.screenshot"])} />
 
       {toast && (
         <div className="app-toast" role="status">

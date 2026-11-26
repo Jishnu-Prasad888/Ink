@@ -8,6 +8,9 @@
     "core:event:allow-listen",
     "core:path:allow-basename",
     "dialog:default",
-    "opener:default"
+    "opener:default",
+    "clipboard-manager:allow-write-image",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
   ]
 }
